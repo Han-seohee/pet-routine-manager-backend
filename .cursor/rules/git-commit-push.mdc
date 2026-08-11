@@ -1,0 +1,144 @@
+---
+description: Git commit and push conventions (Conventional Commits)
+alwaysApply: true
+---
+
+# Git Commit & Push Rules
+
+Only create commits when the user explicitly requests it. When committing or pushing, follow these rules.
+
+## Commit Message Format
+
+Use Conventional Commits:
+
+```text
+<type>: <description>
+```
+
+Allowed types:
+
+| Type | Use when |
+|------|----------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `refactor` | Code structure change without behavior change |
+| `docs` | Documentation |
+| `style` | Formatting / style only |
+| `test` | Tests |
+| `chore` | Project config, packages, misc maintenance |
+| `build` | Build system or dependencies |
+| `ci` | CI/CD changes |
+
+Judge type from changed files and actual work — not mechanically.
+
+Examples:
+- New Backend API → `feat`
+- API bug fix → `fix`
+- Service/Module restructure → `refactor`
+- README/docs → `docs`
+- Tests → `test`
+- Package install, config, initial setup → `chore`
+- Build/deps → `build`
+- GitHub Actions → `ci`
+
+## Commit Description
+
+Keep messages short and clear.
+
+Good:
+```text
+feat: add health check endpoint
+feat: add family creation API
+fix: prevent unauthorized family access
+refactor: simplify family service
+test: add family service tests
+docs: update API documentation
+chore: configure environment variables
+build: add prisma dependency
+ci: add github actions workflow
+```
+
+Never use vague messages: `update`, `fix`, `수정`, `작업완료`, `final`, `final-final`, `asdf`.
+
+## One Commit = One Meaningful Change
+
+- Do not bundle unrelated work into one commit.
+- Multiple files for one feature may belong in one commit.
+
+## Pre-Commit Checklist
+
+Before committing:
+
+1. `git status`
+2. Review changed files
+3. Review diffs
+4. Stage only files that belong in the commit
+5. Choose the appropriate Conventional Commit type
+6. Write the commit message
+
+Never commit secrets. Do not commit:
+- `.env`
+- `.env.local`
+- `.env.*.local`
+
+`.env.example` is allowed.
+
+## Commit & Push Workflow
+
+When the user asks to commit and push (e.g. "규칙에 맞는 커밋 메시지를 작성한 뒤 commit과 push까지 진행해주세요"):
+
+1. Check Git status
+2. Review changes
+3. Determine commit type
+4. Stage required files only
+5. Write Conventional Commit message
+6. Commit
+7. Check current branch
+8. Check remote
+9. Push to the current branch's remote tracking branch
+10. Verify push result
+
+Use the user's existing remote and branch — do not change them arbitrarily.
+
+## Safety
+
+- NEVER update git config
+- NEVER run destructive git commands (force push, hard reset) unless explicitly requested
+- NEVER skip hooks unless explicitly requested
+- NEVER force push to main/master without warning
+- Avoid `git commit --amend` unless all safety conditions are met
+- DO NOT push unless explicitly requested
+
+Pass commit messages via HEREDOC:
+
+```bash
+git commit -m "$(cat <<'EOF'
+feat: add health check endpoint
+EOF
+)"
+```
+
+## When to Ask Before Commit/Push
+
+Ask the user when:
+
+- Purpose of changes is unclear
+- Unrelated work is mixed in large amounts
+- Sensitive data might be included
+- Unexpected file deletions are present
+- Current branch is unexpected
+- Remote is unclear
+- Amend or force push would be needed
+
+Do not ask unnecessary questions for routine code/doc changes.
+
+## Post-Push Report
+
+After commit and push, report briefly:
+
+```text
+Commit: <commit message>
+Branch: <branch>
+Push: 완료
+Commit Hash: <hash>
+```
