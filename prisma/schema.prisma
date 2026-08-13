@@ -1,0 +1,60 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AuthProvider {
+  GOOGLE
+  KAKAO
+}
+
+enum FamilyRole {
+  OWNER
+  MEMBER
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  provider     AuthProvider
+  providerId   String
+  email        String?
+  displayName  String?
+  profileImage String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  familyMembers FamilyMember[]
+
+  @@unique([provider, providerId])
+}
+
+model Family {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members FamilyMember[]
+}
+
+model FamilyMember {
+  id       String     @id @default(uuid()) @db.Uuid
+  userId   String     @db.Uuid
+  familyId String     @db.Uuid
+  role     FamilyRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, familyId])
+  // TODO(migration): Enforce one OWNER per family via PostgreSQL partial unique index:
+  // CREATE UNIQUE INDEX "FamilyMember_one_owner_per_family"
+  //   ON "FamilyMember" ("familyId")
+  //   WHERE role = 'OWNER';
+}

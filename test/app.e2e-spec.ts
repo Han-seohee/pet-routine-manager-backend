@@ -1,3 +1,11 @@
+jest.mock('../src/prisma/prisma.service', () => ({
+  PrismaService: jest.fn().mockImplementation(() => ({
+    onModuleInit: jest.fn().mockResolvedValue(undefined),
+    onModuleDestroy: jest.fn().mockResolvedValue(undefined),
+    pingDatabase: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -21,6 +29,13 @@ describe('AppController (e2e)', () => {
       .get('/health')
       .expect(200)
       .expect({ status: 'ok' });
+  });
+
+  it('/health/db (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/health/db')
+      .expect(200)
+      .expect({ status: 'ok', database: 'connected' });
   });
 
   afterEach(async () => {
