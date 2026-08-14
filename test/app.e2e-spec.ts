@@ -3,6 +3,17 @@ jest.mock('../src/prisma/prisma.service', () => ({
     onModuleInit: jest.fn().mockResolvedValue(undefined),
     onModuleDestroy: jest.fn().mockResolvedValue(undefined),
     pingDatabase: jest.fn().mockResolvedValue(undefined),
+    user: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation((args) =>
+        Promise.resolve({
+          id: 'new-user-id',
+          ...args.data,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+      ),
+    },
   })),
 }));
 
@@ -36,6 +47,27 @@ describe('AppController (e2e)', () => {
       .get('/health/db')
       .expect(200)
       .expect({ status: 'ok', database: 'connected' });
+  });
+
+  it('/auth/oauth/login (POST)', () => {
+    return request(app.getHttpServer())
+      .post('/auth/oauth/login')
+      .send({
+        provider: 'GOOGLE',
+        providerId: 'google-e2e-123',
+        email: 'e2e@example.com',
+        displayName: 'E2E User',
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.user).toMatchObject({
+          id: 'new-user-id',
+          provider: 'GOOGLE',
+          providerId: 'google-e2e-123',
+          email: 'e2e@example.com',
+          displayName: 'E2E User',
+        });
+      });
   });
 
   afterEach(async () => {
