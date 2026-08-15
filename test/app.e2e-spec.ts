@@ -17,6 +17,11 @@ jest.mock('../src/prisma/prisma.service', () => ({
   })),
 }));
 
+process.env.GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ?? 'test-google-client-id';
+process.env.GOOGLE_CLIENT_SECRET =
+  process.env.GOOGLE_CLIENT_SECRET ?? 'test-google-client-secret';
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -67,6 +72,15 @@ describe('AppController (e2e)', () => {
           email: 'e2e@example.com',
           displayName: 'E2E User',
         });
+      });
+  });
+
+  it('/auth/google (GET) redirects to Google OAuth', () => {
+    return request(app.getHttpServer())
+      .get('/auth/google')
+      .expect(302)
+      .expect((response) => {
+        expect(response.headers.location).toContain('accounts.google.com');
       });
   });
 

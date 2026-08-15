@@ -53,4 +53,20 @@ describe('AuthController', () => {
       expect(authService.findOrCreateUser).toHaveBeenCalledWith(oauthProfile);
     });
   });
+
+  describe('google/callback', () => {
+    it('should return the authenticated user from the request', () => {
+      const googleUser = {
+        ...user,
+        provider: 'GOOGLE' as const,
+        providerId: 'google-789',
+      };
+
+      expect(
+        authController.googleAuthCallback({
+          user: googleUser,
+        } as Parameters<AuthController['googleAuthCallback']>[0]),
+      ).toEqual({ user: googleUser });
+    });
+  });
 });
