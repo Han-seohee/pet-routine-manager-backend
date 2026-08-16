@@ -2,6 +2,7 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
@@ -13,6 +14,9 @@ describe('AuthService', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
     };
+  };
+  let jwtService: {
+    sign: jest.Mock;
   };
 
   const oauthProfile = {
@@ -37,6 +41,9 @@ describe('AuthService', () => {
         create: jest.fn(),
       },
     };
+    jwtService = {
+      sign: jest.fn(),
+    };
 
     const app: TestingModule = await Test.createTestingModule({
       providers: [
@@ -44,6 +51,10 @@ describe('AuthService', () => {
         {
           provide: PrismaService,
           useValue: prismaService,
+        },
+        {
+          provide: JwtService,
+          useValue: jwtService,
         },
       ],
     }).compile();
@@ -85,6 +96,17 @@ describe('AuthService', () => {
           profileImage: oauthProfile.profileImage,
         },
       });
+    });
+  });
+
+  describe('signAccessToken', () => {
+    it('should sign a JWT with the user id in the payload', () => {
+      jwtService.sign.mockReturnValue('signed-access-token');
+
+      expect(authService.signAccessToken(existingUser)).toBe(
+        'signed-access-token',
+      );
+      expect(jwtService.sign).toHaveBeenCalledWith({ sub: existingUser.id });
     });
   });
 });

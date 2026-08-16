@@ -21,6 +21,9 @@ process.env.GOOGLE_CLIENT_ID =
   process.env.GOOGLE_CLIENT_ID ?? 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET =
   process.env.GOOGLE_CLIENT_SECRET ?? 'test-google-client-secret';
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret';
+
+import { JwtService } from '@nestjs/jwt';
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
@@ -82,6 +85,28 @@ describe('AppController (e2e)', () => {
       .expect((response) => {
         expect(response.headers.location).toContain('accounts.google.com');
       });
+  });
+
+  it('/auth/me (GET) rejects requests without JWT', () => {
+    return request(app.getHttpServer()).get('/auth/me').expect(401);
+  });
+
+  it('/auth/me (GET) rejects invalid JWT', () => {
+    return request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', 'Bearer invalid-token')
+      .expect(401);
+  });
+
+  it('/auth/me (GET) returns authenticated user for valid JWT', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'jwt-user-id' });
+
+    return request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200)
+      .expect({ userId: 'jwt-user-id' });
   });
 
   afterEach(async () => {

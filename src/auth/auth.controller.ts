@@ -9,10 +9,13 @@ import {
 import type { Request } from 'express';
 import type { User } from '../../generated/prisma/client';
 import { AuthService } from './auth.service';
+import type { AuthenticatedUser } from './dto/jwt-payload.dto';
 import type { OAuthLoginDto } from './dto/oauth-login.dto';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
-type AuthenticatedRequest = Request & { user: User };
+type GoogleAuthenticatedRequest = Request & { user: User };
+type JwtAuthenticatedRequest = Request & { user: AuthenticatedUser };
 
 @Controller('auth')
 export class AuthController {
@@ -36,8 +39,16 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   googleAuthCallback(
-    @Req() req: AuthenticatedRequest,
-  ): { user: User } {
-    return { user: req.user };
+    @Req() req: GoogleAuthenticatedRequest,
+  ): { user: User; accessToken: string } {
+    const accessToken = this.authService.signAccessToken(req.user);
+
+    return { user: req.user, accessToken };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@Req() req: JwtAuthenticatedRequest): AuthenticatedUser {
+    return req.user;
   }
 }

@@ -8,7 +8,7 @@ import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let authController: AuthController;
-  let authService: { findOrCreateUser: jest.Mock };
+  let authService: { findOrCreateUser: jest.Mock; signAccessToken: jest.Mock };
 
   const oauthProfile = {
     provider: 'KAKAO' as const,
@@ -28,6 +28,7 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       findOrCreateUser: jest.fn(),
+      signAccessToken: jest.fn(),
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -55,18 +56,34 @@ describe('AuthController', () => {
   });
 
   describe('google/callback', () => {
-    it('should return the authenticated user from the request', () => {
+    it('should return the authenticated user and access token', () => {
       const googleUser = {
         ...user,
         provider: 'GOOGLE' as const,
         providerId: 'google-789',
       };
 
+      authService.signAccessToken.mockReturnValue('signed-access-token');
+
       expect(
         authController.googleAuthCallback({
           user: googleUser,
         } as Parameters<AuthController['googleAuthCallback']>[0]),
-      ).toEqual({ user: googleUser });
+      ).toEqual({
+        user: googleUser,
+        accessToken: 'signed-access-token',
+      });
+      expect(authService.signAccessToken).toHaveBeenCalledWith(googleUser);
+    });
+  });
+
+  describe('me', () => {
+    it('should return the authenticated user from JWT', () => {
+      expect(
+        authController.getProfile({
+          user: { userId: 'user-id' },
+        } as Parameters<AuthController['getProfile']>[0]),
+      ).toEqual({ userId: 'user-id' });
     });
   });
 });
