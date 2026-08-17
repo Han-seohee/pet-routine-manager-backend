@@ -22,6 +22,8 @@ process.env.GOOGLE_CLIENT_ID =
 process.env.GOOGLE_CLIENT_SECRET =
   process.env.GOOGLE_CLIENT_SECRET ?? 'test-google-client-secret';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret';
+process.env.KAKAO_CLIENT_ID =
+  process.env.KAKAO_CLIENT_ID ?? 'test-kakao-client-id';
 
 import { JwtService } from '@nestjs/jwt';
 
@@ -84,6 +86,15 @@ describe('AppController (e2e)', () => {
       .expect(302)
       .expect((response) => {
         expect(response.headers.location).toContain('accounts.google.com');
+      });
+  });
+
+  it('/auth/kakao (GET) redirects to Kakao OAuth', () => {
+    return request(app.getHttpServer())
+      .get('/auth/kakao')
+      .expect(302)
+      .expect((response) => {
+        expect(response.headers.location).toContain('kauth.kakao.com');
       });
   });
 

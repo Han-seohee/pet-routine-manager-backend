@@ -77,6 +77,29 @@ describe('AuthController', () => {
     });
   });
 
+  describe('kakao/callback', () => {
+    it('should return the authenticated user and access token', () => {
+      const kakaoUser = {
+        ...user,
+        provider: 'KAKAO' as const,
+        providerId: 'kakao-789',
+        email: null,
+      };
+
+      authService.signAccessToken.mockReturnValue('signed-kakao-access-token');
+
+      expect(
+        authController.kakaoAuthCallback({
+          user: kakaoUser,
+        } as Parameters<AuthController['kakaoAuthCallback']>[0]),
+      ).toEqual({
+        user: kakaoUser,
+        accessToken: 'signed-kakao-access-token',
+      });
+      expect(authService.signAccessToken).toHaveBeenCalledWith(kakaoUser);
+    });
+  });
+
   describe('me', () => {
     it('should return the authenticated user from JWT', () => {
       expect(
