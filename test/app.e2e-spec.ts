@@ -14,6 +14,31 @@ jest.mock('../src/prisma/prisma.service', () => ({
         }),
       ),
     },
+    $transaction: jest.fn().mockImplementation(async (callback) => {
+      const tx = {
+        family: {
+          create: jest.fn().mockImplementation((args) =>
+            Promise.resolve({
+              id: 'new-family-id',
+              ...args.data,
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+              updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+            }),
+          ),
+        },
+        familyMember: {
+          create: jest.fn().mockImplementation((args) =>
+            Promise.resolve({
+              id: 'new-member-id',
+              ...args.data,
+              joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+            }),
+          ),
+        },
+      };
+
+      return callback(tx);
+    }),
   })),
 }));
 
@@ -118,6 +143,36 @@ describe('AppController (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200)
       .expect({ userId: 'jwt-user-id' });
+  });
+
+  it('/families (POST) rejects requests without JWT', () => {
+    return request(app.getHttpServer())
+      .post('/families')
+      .send({ name: '우리 가족' })
+      .expect(401);
+  });
+
+  it('/families (POST) creates a family for authenticated user', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'jwt-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '우리 가족' })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.family).toMatchObject({
+          id: 'new-family-id',
+          name: '우리 가족',
+        });
+        expect(response.body.member).toMatchObject({
+          id: 'new-member-id',
+          userId: 'jwt-user-id',
+          familyId: 'new-family-id',
+          role: 'OWNER',
+        });
+      });
   });
 
   afterEach(async () => {
