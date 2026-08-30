@@ -2,7 +2,7 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { FamilyService } from './family.service';
@@ -11,6 +11,8 @@ describe('FamilyService', () => {
   let familyService: FamilyService;
   let prismaService: {
     $transaction: jest.Mock;
+    familyMember: { findMany: jest.Mock; findUnique: jest.Mock };
+    family: { findUnique: jest.Mock };
   };
   let transactionClient: {
     family: { create: jest.Mock };
@@ -33,6 +35,13 @@ describe('FamilyService', () => {
 
     prismaService = {
       $transaction: jest.fn((callback) => callback(transactionClient)),
+      familyMember: {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+      },
+      family: {
+        findUnique: jest.fn(),
+      },
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -116,6 +125,303 @@ describe('FamilyService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaService.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findMyFamilies', () => {
+    it('should return families with roles for the given userId', async () => {
+      const family = {
+        id: 'family-id',
+        name: '우리 가족',
+        createdAt,
+        updatedAt,
+      };
+
+      prismaService.familyMember.findMany.mockResolvedValue([
+        {
+          id: 'member-id',
+          userId: 'user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+          family,
+        },
+      ]);
+
+      await expect(familyService.findMyFamilies('user-id')).resolves.toEqual([
+        {
+          family: {
+            id: family.id,
+            name: family.name,
+            createdAt: family.createdAt,
+            updatedAt: family.updatedAt,
+          },
+          role: 'OWNER',
+        },
+      ]);
+
+      expect(prismaService.familyMember.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user-id' },
+        include: { family: true },
+      });
+    });
+
+    it('should include family data from the FamilyMember relation', async () => {
+      const family = {
+        id: 'family-id-2',
+        name: 'Second Family',
+        createdAt,
+        updatedAt,
+      };
+
+      prismaService.familyMember.findMany.mockResolvedValue([
+        {
+          id: 'member-id-2',
+          userId: 'user-id',
+          familyId: family.id,
+          role: 'MEMBER',
+          joinedAt,
+          family,
+        },
+      ]);
+
+      const result = await familyService.findMyFamilies('user-id');
+
+      expect(result[0].family).toEqual({
+        id: family.id,
+        name: family.name,
+        createdAt: family.createdAt,
+        updatedAt: family.updatedAt,
+      });
+      expect(result[0].role).toBe('MEMBER');
+    });
+
+    it('should return an empty array when the user has no families', async () => {
+      prismaService.familyMember.findMany.mockResolvedValue([]);
+
+      await expect(familyService.findMyFamilies('user-id')).resolves.toEqual(
+        [],
+      );
+    });
+  });
+
+  describe('findFamilyById', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    it('should return family when user is a member', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+        family,
+      });
+
+      await expect(
+        familyService.findFamilyById('user-id', 'family-id'),
+      ).resolves.toEqual(family);
+
+      expect(prismaService.familyMember.findUnique).toHaveBeenCalledWith({
+        where: {
+          userId_familyId: { userId: 'user-id', familyId: 'family-id' },
+        },
+        include: { family: true },
+      });
+      expect(prismaService.family.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException when user is not a member', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.findFamilyById('other-user-id', 'family-id'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.family.findUnique).toHaveBeenCalledWith({
+        where: { id: 'family-id' },
+      });
+    });
+
+    it('should throw NotFoundException when family does not exist', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(null);
+
+      await expect(
+        familyService.findFamilyById('user-id', 'missing-family-id'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('should query with both userId and familyId', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+        family,
+      });
+
+      const result = await familyService.findFamilyById('user-id', family.id);
+
+      expect(result).toEqual(family);
+      expect(prismaService.familyMember.findUnique).toHaveBeenCalledWith({
+        where: {
+          userId_familyId: { userId: 'user-id', familyId: family.id },
+        },
+        include: { family: true },
+      });
+    });
+  });
+
+  describe('findFamilyMembers', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    it('should return members with user info and role for a family member', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+      prismaService.familyMember.findMany.mockResolvedValue([
+        {
+          id: 'member-id',
+          userId: 'user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+          user: {
+            id: 'user-id',
+            displayName: 'Test User',
+            profileImage: 'https://example.com/avatar.png',
+          },
+        },
+        {
+          id: 'member-id-2',
+          userId: 'other-user-id',
+          familyId: family.id,
+          role: 'MEMBER',
+          joinedAt,
+          user: {
+            id: 'other-user-id',
+            displayName: 'Other User',
+            profileImage: null,
+          },
+        },
+      ]);
+
+      await expect(
+        familyService.findFamilyMembers('user-id', 'family-id'),
+      ).resolves.toEqual([
+        {
+          userId: 'user-id',
+          displayName: 'Test User',
+          profileImage: 'https://example.com/avatar.png',
+          role: 'OWNER',
+        },
+        {
+          userId: 'other-user-id',
+          displayName: 'Other User',
+          profileImage: null,
+          role: 'MEMBER',
+        },
+      ]);
+
+      expect(prismaService.familyMember.findUnique).toHaveBeenCalledWith({
+        where: {
+          userId_familyId: { userId: 'user-id', familyId: 'family-id' },
+        },
+      });
+      expect(prismaService.familyMember.findMany).toHaveBeenCalledWith({
+        where: { familyId: 'family-id' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              displayName: true,
+              profileImage: true,
+            },
+          },
+        },
+      });
+    });
+
+    it('should throw ForbiddenException when user is not a member', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.findFamilyMembers('other-user-id', 'family-id'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.familyMember.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should return an empty array when family has no members', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+      prismaService.familyMember.findMany.mockResolvedValue([]);
+
+      await expect(
+        familyService.findFamilyMembers('user-id', 'family-id'),
+      ).resolves.toEqual([]);
+    });
+
+    it('should select only required user fields', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+      prismaService.familyMember.findMany.mockResolvedValue([
+        {
+          id: 'member-id',
+          userId: 'user-id',
+          familyId: family.id,
+          role: 'MEMBER',
+          joinedAt,
+          user: {
+            id: 'user-id',
+            displayName: 'Test User',
+            profileImage: null,
+          },
+        },
+      ]);
+
+      const result = await familyService.findFamilyMembers('user-id', family.id);
+
+      expect(result[0]).toEqual({
+        userId: 'user-id',
+        displayName: 'Test User',
+        profileImage: null,
+        role: 'MEMBER',
+      });
+      expect(Object.keys(result[0])).toEqual([
+        'userId',
+        'displayName',
+        'profileImage',
+        'role',
+      ]);
     });
   });
 });

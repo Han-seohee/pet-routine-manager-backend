@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Family, FamilyMember } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateFamilyDto } from './dto/create-family.dto';
@@ -6,6 +11,23 @@ import type { CreateFamilyDto } from './dto/create-family.dto';
 export type CreateFamilyResult = {
   family: Family;
   member: FamilyMember;
+};
+
+export type MyFamilyResult = {
+  family: Pick<Family, 'id' | 'name' | 'createdAt' | 'updatedAt'>;
+  role: FamilyMember['role'];
+};
+
+export type FamilyDetailResult = Pick<
+  Family,
+  'id' | 'name' | 'createdAt' | 'updatedAt'
+>;
+
+export type FamilyMemberResult = {
+  userId: string;
+  displayName: string | null;
+  profileImage: string | null;
+  role: FamilyMember['role'];
 };
 
 @Injectable()
@@ -37,5 +59,97 @@ export class FamilyService {
 
       return { family, member };
     });
+  }
+
+  async findMyFamilies(userId: string): Promise<MyFamilyResult[]> {
+    const members = await this.prisma.familyMember.findMany({
+      where: { userId },
+      include: { family: true },
+    });
+
+    return members.map(({ family, role }) => ({
+      family: {
+        id: family.id,
+        name: family.name,
+        createdAt: family.createdAt,
+        updatedAt: family.updatedAt,
+      },
+      role,
+    }));
+  }
+
+  async findFamilyById(
+    userId: string,
+    familyId: string,
+  ): Promise<FamilyDetailResult> {
+    const membership = await this.prisma.familyMember.findUnique({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+      include: { family: true },
+    });
+
+    if (membership) {
+      const { family } = membership;
+      return {
+        id: family.id,
+        name: family.name,
+        createdAt: family.createdAt,
+        updatedAt: family.updatedAt,
+      };
+    }
+
+    const family = await this.prisma.family.findUnique({
+      where: { id: familyId },
+    });
+
+    if (!family) {
+      throw new NotFoundException();
+    }
+
+    throw new ForbiddenException();
+  }
+
+  async findFamilyMembers(
+    userId: string,
+    familyId: string,
+  ): Promise<FamilyMemberResult[]> {
+    const membership = await this.prisma.familyMember.findUnique({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+    });
+
+    if (!membership) {
+      const family = await this.prisma.family.findUnique({
+        where: { id: familyId },
+      });
+
+      if (!family) {
+        throw new NotFoundException();
+      }
+
+      throw new ForbiddenException();
+    }
+
+    const members = await this.prisma.familyMember.findMany({
+      where: { familyId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+            profileImage: true,
+          },
+        },
+      },
+    });
+
+    return members.map(({ user, role }) => ({
+      userId: user.id,
+      displayName: user.displayName,
+      profileImage: user.profileImage,
+      role,
+    }));
   }
 }
