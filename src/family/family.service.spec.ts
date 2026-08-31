@@ -12,7 +12,7 @@ describe('FamilyService', () => {
   let prismaService: {
     $transaction: jest.Mock;
     familyMember: { findMany: jest.Mock; findUnique: jest.Mock };
-    family: { findUnique: jest.Mock };
+    family: { findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
   };
   let transactionClient: {
     family: { create: jest.Mock };
@@ -41,6 +41,8 @@ describe('FamilyService', () => {
       },
       family: {
         findUnique: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
       },
     };
 
@@ -422,6 +424,137 @@ describe('FamilyService', () => {
         'profileImage',
         'role',
       ]);
+    });
+  });
+
+  describe('updateFamily', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    it('should update family when user is OWNER', async () => {
+      const updatedFamily = {
+        ...family,
+        name: '새 가족 이름',
+        updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+      prismaService.family.update.mockResolvedValue(updatedFamily);
+
+      await expect(
+        familyService.updateFamily('user-id', 'family-id', {
+          name: '새 가족 이름',
+        }),
+      ).resolves.toEqual(updatedFamily);
+
+      expect(prismaService.family.update).toHaveBeenCalledWith({
+        where: { id: 'family-id' },
+        data: { name: '새 가족 이름' },
+      });
+    });
+
+    it('should throw ForbiddenException when user is MEMBER', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.updateFamily('user-id', 'family-id', { name: 'New Name' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.family.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when family does not exist', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(null);
+
+      await expect(
+        familyService.updateFamily('user-id', 'missing-family-id', {
+          name: 'New Name',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaService.family.update).not.toHaveBeenCalled();
+    });
+
+    it('should reject empty family names', async () => {
+      await expect(
+        familyService.updateFamily('user-id', 'family-id', { name: '   ' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteFamily', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    it('should delete family when user is OWNER', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+      prismaService.family.delete.mockResolvedValue(family);
+
+      await expect(
+        familyService.deleteFamily('user-id', 'family-id'),
+      ).resolves.toBeUndefined();
+
+      expect(prismaService.family.delete).toHaveBeenCalledWith({
+        where: { id: 'family-id' },
+      });
+    });
+
+    it('should throw ForbiddenException when user is MEMBER', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.deleteFamily('user-id', 'family-id'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.family.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when family does not exist', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(null);
+
+      await expect(
+        familyService.deleteFamily('user-id', 'missing-family-id'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaService.family.delete).not.toHaveBeenCalled();
     });
   });
 });

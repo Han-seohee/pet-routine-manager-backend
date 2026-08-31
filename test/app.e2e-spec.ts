@@ -46,6 +46,15 @@ jest.mock('../src/prisma/prisma.service', () => ({
     },
     family: {
       findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockImplementation((args) =>
+        Promise.resolve({
+          id: args.where.id,
+          name: args.data.name,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+        }),
+      ),
+      delete: jest.fn().mockResolvedValue(undefined),
     },
   })),
 }));
@@ -419,6 +428,161 @@ describe('AppController (e2e)', () => {
 
     return request(app.getHttpServer())
       .get('/families/missing-family-id/members')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(404);
+  });
+
+  it('/families/:id (PATCH) rejects requests without JWT', () => {
+    return request(app.getHttpServer())
+      .patch('/families/existing-family-id')
+      .send({ name: '새 가족 이름' })
+      .expect(401);
+  });
+
+  it('/families/:id (PATCH) updates family for OWNER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .patch(`/families/${familyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '새 가족 이름' })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          id: familyId,
+          name: '새 가족 이름',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-03T00:00:00.000Z',
+        });
+      });
+  });
+
+  it('/families/:id (PATCH) returns 403 when user is MEMBER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'member-user-id' });
+    const family = {
+      id: 'existing-family-id',
+      name: '우리 가족',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'member-id',
+      userId: 'member-user-id',
+      familyId: family.id,
+      role: 'MEMBER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
+
+    return request(app.getHttpServer())
+      .patch(`/families/${family.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '새 가족 이름' })
+      .expect(403);
+  });
+
+  it('/families/:id (PATCH) returns 404 when family does not exist', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
+
+    return request(app.getHttpServer())
+      .patch('/families/missing-family-id')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '새 가족 이름' })
+      .expect(404);
+  });
+
+  it('/families/:id (PATCH) returns 400 for empty name', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .patch('/families/existing-family-id')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '   ' })
+      .expect(400);
+  });
+
+  it('/families/:id (DELETE) rejects requests without JWT', () => {
+    return request(app.getHttpServer())
+      .delete('/families/existing-family-id')
+      .expect(401);
+  });
+
+  it('/families/:id (DELETE) deletes family for OWNER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .delete(`/families/${familyId}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(204);
+  });
+
+  it('/families/:id (DELETE) returns 403 when user is MEMBER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'member-user-id' });
+    const family = {
+      id: 'existing-family-id',
+      name: '우리 가족',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'member-id',
+      userId: 'member-user-id',
+      familyId: family.id,
+      role: 'MEMBER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
+
+    return request(app.getHttpServer())
+      .delete(`/families/${family.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(403);
+  });
+
+  it('/families/:id (DELETE) returns 404 when family does not exist', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
+
+    return request(app.getHttpServer())
+      .delete('/families/missing-family-id')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(404);
   });

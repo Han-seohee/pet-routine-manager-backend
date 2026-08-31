@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -11,6 +14,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/dto/jwt-payload.dto';
 import type { CreateFamilyDto } from './dto/create-family.dto';
+import type { UpdateFamilyDto } from './dto/update-family.dto';
 import {
   FamilyService,
   type CreateFamilyResult,
@@ -49,6 +53,26 @@ export class FamilyController {
     @Param('id') id: string,
   ): Promise<FamilyDetailResult> {
     return this.familyService.findFamilyById(req.user.userId, id);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  updateFamily(
+    @Req() req: JwtAuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: UpdateFamilyDto,
+  ): Promise<FamilyDetailResult> {
+    return this.familyService.updateFamily(req.user.userId, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  deleteFamily(
+    @Req() req: JwtAuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.familyService.deleteFamily(req.user.userId, id);
   }
 
   @Post()

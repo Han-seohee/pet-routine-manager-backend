@@ -13,6 +13,8 @@ describe('FamilyController', () => {
     findMyFamilies: jest.Mock;
     findFamilyById: jest.Mock;
     findFamilyMembers: jest.Mock;
+    updateFamily: jest.Mock;
+    deleteFamily: jest.Mock;
   };
 
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
@@ -41,6 +43,8 @@ describe('FamilyController', () => {
       findMyFamilies: jest.fn(),
       findFamilyById: jest.fn(),
       findFamilyMembers: jest.fn(),
+      updateFamily: jest.fn(),
+      deleteFamily: jest.fn(),
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -151,6 +155,55 @@ describe('FamilyController', () => {
       ).resolves.toEqual(familyMembersResult);
 
       expect(familyService.findFamilyMembers).toHaveBeenCalledWith(
+        'user-id',
+        'family-id',
+      );
+    });
+  });
+
+  describe('updateFamily', () => {
+    const familyDetailResult = {
+      id: 'family-id',
+      name: '새 가족 이름',
+      createdAt,
+      updatedAt,
+    };
+
+    it('should pass authenticated userId, family id, and dto to FamilyService', async () => {
+      familyService.updateFamily.mockResolvedValue(familyDetailResult);
+
+      await expect(
+        familyController.updateFamily(
+          { user: { userId: 'user-id' } } as Parameters<
+            FamilyController['updateFamily']
+          >[0],
+          'family-id',
+          { name: '새 가족 이름' },
+        ),
+      ).resolves.toEqual(familyDetailResult);
+
+      expect(familyService.updateFamily).toHaveBeenCalledWith(
+        'user-id',
+        'family-id',
+        { name: '새 가족 이름' },
+      );
+    });
+  });
+
+  describe('deleteFamily', () => {
+    it('should pass authenticated userId and family id to FamilyService', async () => {
+      familyService.deleteFamily.mockResolvedValue(undefined);
+
+      await expect(
+        familyController.deleteFamily(
+          { user: { userId: 'user-id' } } as Parameters<
+            FamilyController['deleteFamily']
+          >[0],
+          'family-id',
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(familyService.deleteFamily).toHaveBeenCalledWith(
         'user-id',
         'family-id',
       );

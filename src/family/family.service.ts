@@ -7,6 +7,7 @@ import {
 import type { Family, FamilyMember } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateFamilyDto } from './dto/create-family.dto';
+import type { UpdateFamilyDto } from './dto/update-family.dto';
 
 export type CreateFamilyResult = {
   family: Family;
@@ -151,5 +152,64 @@ export class FamilyService {
       profileImage: user.profileImage,
       role,
     }));
+  }
+
+  async updateFamily(
+    userId: string,
+    familyId: string,
+    dto: UpdateFamilyDto,
+  ): Promise<FamilyDetailResult> {
+    const name = dto.name?.trim();
+
+    if (!name) {
+      throw new BadRequestException('name must be a non-empty string');
+    }
+
+    await this.assertFamilyOwner(userId, familyId);
+
+    const family = await this.prisma.family.update({
+      where: { id: familyId },
+      data: { name },
+    });
+
+    return {
+      id: family.id,
+      name: family.name,
+      createdAt: family.createdAt,
+      updatedAt: family.updatedAt,
+    };
+  }
+
+  async deleteFamily(userId: string, familyId: string): Promise<void> {
+    await this.assertFamilyOwner(userId, familyId);
+
+    await this.prisma.family.delete({
+      where: { id: familyId },
+    });
+  }
+
+  private async assertFamilyOwner(
+    userId: string,
+    familyId: string,
+  ): Promise<void> {
+    const membership = await this.prisma.familyMember.findUnique({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+    });
+
+    if (membership?.role === 'OWNER') {
+      return;
+    }
+
+    const family = await this.prisma.family.findUnique({
+      where: { id: familyId },
+    });
+
+    if (!family) {
+      throw new NotFoundException();
+    }
+
+    throw new ForbiddenException();
   }
 }
