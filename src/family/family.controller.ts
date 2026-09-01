@@ -13,10 +13,12 @@ import {
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/dto/jwt-payload.dto';
+import type { AddFamilyMemberDto } from './dto/add-family-member.dto';
 import type { CreateFamilyDto } from './dto/create-family.dto';
 import type { UpdateFamilyDto } from './dto/update-family.dto';
 import {
   FamilyService,
+  type AddFamilyMemberResult,
   type CreateFamilyResult,
   type FamilyDetailResult,
   type FamilyMemberResult,
@@ -44,6 +46,20 @@ export class FamilyController {
     @Param('id') id: string,
   ): Promise<FamilyMemberResult[]> {
     return this.familyService.findFamilyMembers(req.user.userId, id);
+  }
+
+  @Post(':id/members')
+  @UseGuards(JwtAuthGuard)
+  addFamilyMember(
+    @Req() req: JwtAuthenticatedRequest,
+    @Param('id') familyId: string,
+    @Body() dto: AddFamilyMemberDto,
+  ): Promise<AddFamilyMemberResult> {
+    return this.familyService.addFamilyMember(
+      req.user.userId,
+      familyId,
+      dto.userId,
+    );
   }
 
   @Get(':id')

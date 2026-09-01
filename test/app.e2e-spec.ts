@@ -43,6 +43,13 @@ jest.mock('../src/prisma/prisma.service', () => ({
     familyMember: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockImplementation((args) =>
+        Promise.resolve({
+          id: 'new-added-member-id',
+          ...args.data,
+          joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+      ),
     },
     family: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -430,6 +437,172 @@ describe('AppController (e2e)', () => {
       .get('/families/missing-family-id/members')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(404);
+  });
+
+  it('/families/:id/members (POST) rejects requests without JWT', () => {
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/members')
+      .send({ userId: 'target-user-id' })
+      .expect(401);
+  });
+
+  it('/families/:id/members (POST) adds a user as MEMBER for OWNER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+    const targetUser = {
+      id: 'target-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-target',
+      email: 'target@example.com',
+      displayName: 'Target User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockImplementation((args: { where: { userId_familyId: { userId: string; familyId: string } } }) => {
+        if (args.where.userId_familyId.userId === 'owner-user-id') {
+          return Promise.resolve({
+            id: 'owner-member-id',
+            userId: 'owner-user-id',
+            familyId,
+            role: 'OWNER',
+            joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+          });
+        }
+
+        return Promise.resolve(null);
+      });
+    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(targetUser);
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/members`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ userId: targetUser.id })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toEqual({
+          id: 'new-added-member-id',
+          userId: targetUser.id,
+          familyId,
+          role: 'MEMBER',
+          joinedAt: '2026-01-01T00:00:00.000Z',
+        });
+      });
+  });
+
+  it('/families/:id/members (POST) returns 403 when user is MEMBER', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'member-user-id' });
+    const family = {
+      id: 'existing-family-id',
+      name: '우리 가족',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'member-id',
+      userId: 'member-user-id',
+      familyId: family.id,
+      role: 'MEMBER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
+
+    return request(app.getHttpServer())
+      .post(`/families/${family.id}/members`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ userId: 'target-user-id' })
+      .expect(403);
+  });
+
+  it('/families/:id/members (POST) returns 404 when family does not exist', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
+
+    return request(app.getHttpServer())
+      .post('/families/missing-family-id/members')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ userId: 'target-user-id' })
+      .expect(404);
+  });
+
+  it('/families/:id/members (POST) returns 404 when target user does not exist', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(null);
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/members`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ userId: 'missing-user-id' })
+      .expect(404);
+  });
+
+  it('/families/:id/members (POST) returns 409 when user is already a member', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+    const targetUser = {
+      id: 'target-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-target',
+      email: 'target@example.com',
+      displayName: 'Target User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockImplementation((args: { where: { userId_familyId: { userId: string; familyId: string } } }) => {
+        if (args.where.userId_familyId.userId === 'owner-user-id') {
+          return Promise.resolve({
+            id: 'owner-member-id',
+            userId: 'owner-user-id',
+            familyId,
+            role: 'OWNER',
+            joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+          });
+        }
+
+        return Promise.resolve({
+          id: 'existing-member-id',
+          userId: targetUser.id,
+          familyId,
+          role: 'MEMBER',
+          joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+        });
+      });
+    jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(targetUser);
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/members`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ userId: targetUser.id })
+      .expect(409);
   });
 
   it('/families/:id (PATCH) rejects requests without JWT', () => {

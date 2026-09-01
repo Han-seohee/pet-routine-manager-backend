@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -30,6 +31,11 @@ export type FamilyMemberResult = {
   profileImage: string | null;
   role: FamilyMember['role'];
 };
+
+export type AddFamilyMemberResult = Pick<
+  FamilyMember,
+  'id' | 'userId' | 'familyId' | 'role' | 'joinedAt'
+>;
 
 @Injectable()
 export class FamilyService {
@@ -186,6 +192,48 @@ export class FamilyService {
     await this.prisma.family.delete({
       where: { id: familyId },
     });
+  }
+
+  async addFamilyMember(
+    ownerUserId: string,
+    familyId: string,
+    userId: string,
+  ): Promise<AddFamilyMemberResult> {
+    await this.assertFamilyOwner(ownerUserId, familyId);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException();
+    }
+
+    const existingMembership = await this.prisma.familyMember.findUnique({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+    });
+
+    if (existingMembership) {
+      throw new ConflictException();
+    }
+
+    const member = await this.prisma.familyMember.create({
+      data: {
+        userId,
+        familyId,
+        role: 'MEMBER',
+      },
+    });
+
+    return {
+      id: member.id,
+      userId: member.userId,
+      familyId: member.familyId,
+      role: member.role,
+      joinedAt: member.joinedAt,
+    };
   }
 
   private async assertFamilyOwner(

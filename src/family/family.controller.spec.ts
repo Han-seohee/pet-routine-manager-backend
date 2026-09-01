@@ -15,6 +15,7 @@ describe('FamilyController', () => {
     findFamilyMembers: jest.Mock;
     updateFamily: jest.Mock;
     deleteFamily: jest.Mock;
+    addFamilyMember: jest.Mock;
   };
 
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
@@ -45,6 +46,7 @@ describe('FamilyController', () => {
       findFamilyMembers: jest.fn(),
       updateFamily: jest.fn(),
       deleteFamily: jest.fn(),
+      addFamilyMember: jest.fn(),
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -206,6 +208,36 @@ describe('FamilyController', () => {
       expect(familyService.deleteFamily).toHaveBeenCalledWith(
         'user-id',
         'family-id',
+      );
+    });
+  });
+
+  describe('addFamilyMember', () => {
+    const addFamilyMemberResult = {
+      id: 'new-member-id',
+      userId: 'target-user-id',
+      familyId: 'family-id',
+      role: 'MEMBER' as const,
+      joinedAt,
+    };
+
+    it('should pass authenticated userId, family id, and dto.userId to FamilyService', async () => {
+      familyService.addFamilyMember.mockResolvedValue(addFamilyMemberResult);
+
+      await expect(
+        familyController.addFamilyMember(
+          { user: { userId: 'owner-user-id' } } as Parameters<
+            FamilyController['addFamilyMember']
+          >[0],
+          'family-id',
+          { userId: 'target-user-id' },
+        ),
+      ).resolves.toEqual(addFamilyMemberResult);
+
+      expect(familyService.addFamilyMember).toHaveBeenCalledWith(
+        'owner-user-id',
+        'family-id',
+        'target-user-id',
       );
     });
   });

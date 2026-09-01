@@ -2,7 +2,7 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { FamilyService } from './family.service';
@@ -11,8 +11,13 @@ describe('FamilyService', () => {
   let familyService: FamilyService;
   let prismaService: {
     $transaction: jest.Mock;
-    familyMember: { findMany: jest.Mock; findUnique: jest.Mock };
+    familyMember: {
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
     family: { findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
+    user: { findUnique: jest.Mock };
   };
   let transactionClient: {
     family: { create: jest.Mock };
@@ -38,11 +43,15 @@ describe('FamilyService', () => {
       familyMember: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        create: jest.fn(),
       },
       family: {
         findUnique: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
       },
     };
 
@@ -555,6 +564,217 @@ describe('FamilyService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(prismaService.family.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addFamilyMember', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    const targetUser = {
+      id: 'target-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-target',
+      email: 'target@example.com',
+      displayName: 'Target User',
+      profileImage: null,
+      createdAt,
+      updatedAt,
+    };
+
+    it('should add a user as MEMBER when requester is OWNER', async () => {
+      const createdMember = {
+        id: 'new-member-id',
+        userId: targetUser.id,
+        familyId: family.id,
+        role: 'MEMBER' as const,
+        joinedAt,
+      };
+
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(null);
+      prismaService.user.findUnique.mockResolvedValue(targetUser);
+      prismaService.familyMember.create.mockResolvedValue(createdMember);
+
+      await expect(
+        familyService.addFamilyMember(
+          'owner-user-id',
+          family.id,
+          targetUser.id,
+        ),
+      ).resolves.toEqual(createdMember);
+
+      expect(prismaService.user.findUnique).toHaveBeenCalledWith({
+        where: { id: targetUser.id },
+      });
+      expect(prismaService.familyMember.create).toHaveBeenCalledWith({
+        data: {
+          userId: targetUser.id,
+          familyId: family.id,
+          role: 'MEMBER',
+        },
+      });
+    });
+
+    it('should throw ForbiddenException when requester is MEMBER', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'member-user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.addFamilyMember(
+          'member-user-id',
+          family.id,
+          targetUser.id,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.user.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.familyMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when family does not exist', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(null);
+
+      await expect(
+        familyService.addFamilyMember(
+          'owner-user-id',
+          'missing-family-id',
+          targetUser.id,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaService.user.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.familyMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when target user does not exist', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'owner-member-id',
+        userId: 'owner-user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+      prismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        familyService.addFamilyMember(
+          'owner-user-id',
+          family.id,
+          'missing-user-id',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaService.familyMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException when user is already a member', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce({
+          id: 'existing-member-id',
+          userId: targetUser.id,
+          familyId: family.id,
+          role: 'MEMBER',
+          joinedAt,
+        });
+      prismaService.user.findUnique.mockResolvedValue(targetUser);
+
+      await expect(
+        familyService.addFamilyMember(
+          'owner-user-id',
+          family.id,
+          targetUser.id,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(prismaService.familyMember.create).not.toHaveBeenCalled();
+    });
+
+    it('should create FamilyMember with MEMBER role', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(null);
+      prismaService.user.findUnique.mockResolvedValue(targetUser);
+      prismaService.familyMember.create.mockResolvedValue({
+        id: 'new-member-id',
+        userId: targetUser.id,
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+
+      const result = await familyService.addFamilyMember(
+        'owner-user-id',
+        family.id,
+        targetUser.id,
+      );
+
+      expect(result.role).toBe('MEMBER');
+    });
+
+    it('should create FamilyMember with the correct userId and familyId', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(null);
+      prismaService.user.findUnique.mockResolvedValue(targetUser);
+      prismaService.familyMember.create.mockResolvedValue({
+        id: 'new-member-id',
+        userId: targetUser.id,
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+
+      await familyService.addFamilyMember(
+        'owner-user-id',
+        family.id,
+        targetUser.id,
+      );
+
+      expect(prismaService.familyMember.create).toHaveBeenCalledWith({
+        data: {
+          userId: targetUser.id,
+          familyId: family.id,
+          role: 'MEMBER',
+        },
+      });
     });
   });
 });
