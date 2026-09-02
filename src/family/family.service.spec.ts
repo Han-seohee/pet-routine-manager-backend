@@ -15,6 +15,7 @@ describe('FamilyService', () => {
       findMany: jest.Mock;
       findUnique: jest.Mock;
       create: jest.Mock;
+      delete: jest.Mock;
     };
     family: { findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
     user: { findUnique: jest.Mock };
@@ -44,6 +45,7 @@ describe('FamilyService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         create: jest.fn(),
+        delete: jest.fn(),
       },
       family: {
         findUnique: jest.fn(),
@@ -775,6 +777,138 @@ describe('FamilyService', () => {
           role: 'MEMBER',
         },
       });
+    });
+  });
+
+  describe('removeFamilyMember', () => {
+    const family = {
+      id: 'family-id',
+      name: '우리 가족',
+      createdAt,
+      updatedAt,
+    };
+
+    const targetMember = {
+      id: 'member-id',
+      userId: 'target-user-id',
+      familyId: family.id,
+      role: 'MEMBER' as const,
+      joinedAt,
+    };
+
+    it('should remove a MEMBER when requester is OWNER', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(targetMember);
+      prismaService.familyMember.delete.mockResolvedValue(targetMember);
+
+      await expect(
+        familyService.removeFamilyMember(
+          'owner-user-id',
+          family.id,
+          targetMember.userId,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(prismaService.familyMember.delete).toHaveBeenCalledWith({
+        where: {
+          userId_familyId: {
+            userId: targetMember.userId,
+            familyId: family.id,
+          },
+        },
+      });
+    });
+
+    it('should throw ForbiddenException when requester is MEMBER', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'member-id',
+        userId: 'member-user-id',
+        familyId: family.id,
+        role: 'MEMBER',
+        joinedAt,
+      });
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        familyService.removeFamilyMember(
+          'member-user-id',
+          family.id,
+          targetMember.userId,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.familyMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when FamilyMember does not exist', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        familyService.removeFamilyMember(
+          'owner-user-id',
+          family.id,
+          'missing-user-id',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(prismaService.familyMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when OWNER tries to remove themselves', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue({
+        id: 'owner-member-id',
+        userId: 'owner-user-id',
+        familyId: family.id,
+        role: 'OWNER',
+        joinedAt,
+      });
+
+      await expect(
+        familyService.removeFamilyMember(
+          'owner-user-id',
+          family.id,
+          'owner-user-id',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.familyMember.delete).not.toHaveBeenCalled();
+    });
+
+    it('should delete only FamilyMember and not the User record', async () => {
+      prismaService.familyMember.findUnique
+        .mockResolvedValueOnce({
+          id: 'owner-member-id',
+          userId: 'owner-user-id',
+          familyId: family.id,
+          role: 'OWNER',
+          joinedAt,
+        })
+        .mockResolvedValueOnce(targetMember);
+      prismaService.familyMember.delete.mockResolvedValue(targetMember);
+
+      await familyService.removeFamilyMember(
+        'owner-user-id',
+        family.id,
+        targetMember.userId,
+      );
+
+      expect(prismaService.familyMember.delete).toHaveBeenCalledTimes(1);
+      expect(prismaService.user.findUnique).not.toHaveBeenCalled();
     });
   });
 });

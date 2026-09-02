@@ -236,6 +236,34 @@ export class FamilyService {
     };
   }
 
+  async removeFamilyMember(
+    ownerUserId: string,
+    familyId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.assertFamilyOwner(ownerUserId, familyId);
+
+    if (ownerUserId === userId) {
+      throw new BadRequestException();
+    }
+
+    const existingMembership = await this.prisma.familyMember.findUnique({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+    });
+
+    if (!existingMembership) {
+      throw new NotFoundException();
+    }
+
+    await this.prisma.familyMember.delete({
+      where: {
+        userId_familyId: { userId, familyId },
+      },
+    });
+  }
+
   private async assertFamilyOwner(
     userId: string,
     familyId: string,

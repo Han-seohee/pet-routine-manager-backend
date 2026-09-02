@@ -62,6 +62,21 @@ export class FamilyController {
     );
   }
 
+  @Delete(':id/members/:userId')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  removeFamilyMember(
+    @Req() req: JwtAuthenticatedRequest,
+    @Param('id') familyId: string,
+    @Param('userId') userId: string,
+  ): Promise<void> {
+    return this.familyService.removeFamilyMember(
+      req.user.userId,
+      familyId,
+      userId,
+    );
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   findFamilyById(
