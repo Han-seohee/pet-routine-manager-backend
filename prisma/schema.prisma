@@ -18,6 +18,11 @@ enum FamilyRole {
   MEMBER
 }
 
+enum PetGender {
+  MALE
+  FEMALE
+}
+
 model User {
   id           String       @id @default(uuid()) @db.Uuid
   provider     AuthProvider
@@ -40,6 +45,7 @@ model Family {
   updatedAt DateTime @updatedAt
 
   members FamilyMember[]
+  pets    Pet[]
 }
 
 model FamilyMember {
@@ -57,4 +63,16 @@ model FamilyMember {
   // CREATE UNIQUE INDEX "FamilyMember_one_owner_per_family"
   //   ON "FamilyMember" ("familyId")
   //   WHERE role = 'OWNER';
+}
+
+model Pet {
+  id        String    @id @default(uuid()) @db.Uuid
+  familyId  String    @db.Uuid
+  name      String
+  birthDate DateTime
+  gender    PetGender
+  breed     String
+  image     String?
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 }
