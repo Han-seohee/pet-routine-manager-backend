@@ -264,18 +264,18 @@ export class FamilyService {
     });
   }
 
-  private async assertFamilyOwner(
+  async assertFamilyMember(
     userId: string,
     familyId: string,
-  ): Promise<void> {
+  ): Promise<FamilyMember> {
     const membership = await this.prisma.familyMember.findUnique({
       where: {
         userId_familyId: { userId, familyId },
       },
     });
 
-    if (membership?.role === 'OWNER') {
-      return;
+    if (membership) {
+      return membership;
     }
 
     const family = await this.prisma.family.findUnique({
@@ -287,5 +287,13 @@ export class FamilyService {
     }
 
     throw new ForbiddenException();
+  }
+
+  async assertFamilyOwner(userId: string, familyId: string): Promise<void> {
+    const membership = await this.assertFamilyMember(userId, familyId);
+
+    if (membership.role !== 'OWNER') {
+      throw new ForbiddenException();
+    }
   }
 }

@@ -66,13 +66,14 @@ model FamilyMember {
 }
 
 model Pet {
-  id        String    @id @default(uuid()) @db.Uuid
-  familyId  String    @db.Uuid
-  name      String
-  birthDate DateTime
-  gender    PetGender
-  breed     String
-  image     String?
+  id                 String    @id @default(uuid()) @db.Uuid
+  familyId           String    @db.Uuid
+  name               String
+  birthDate          DateTime?
+  gender             PetGender
+  breed              String
+  image              String?
+  registrationNumber String?   @unique
 
   family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 }

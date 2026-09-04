@@ -1,0 +1,80 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { AuthProvider } from '../../../generated/prisma/enums';
+
+export class UserResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    example: '11111111-1111-1111-1111-111111111111',
+  })
+  id: string;
+
+  @ApiProperty({
+    enum: AuthProvider,
+    enumName: 'AuthProvider',
+    example: 'GOOGLE',
+  })
+  provider: AuthProvider;
+
+  @ApiProperty({ example: 'google-123' })
+  providerId: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'user@example.com',
+  })
+  email: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '홍길동',
+  })
+  displayName: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'https://example.com/avatar.png',
+  })
+  profileImage: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
+  })
+  createdAt: Date;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-01-01T00:00:00.000Z',
+  })
+  updatedAt: Date;
+}
+
+export class OAuthLoginResponseDto {
+  @ApiProperty({ type: UserResponseDto })
+  user: UserResponseDto;
+}
+
+export class OAuthCallbackResponseDto {
+  @ApiProperty({ type: UserResponseDto })
+  user: UserResponseDto;
+
+  @ApiProperty({
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    description: '이후 API 호출에 사용하는 JWT access token',
+  })
+  accessToken: string;
+}
+
+export class CurrentUserResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    example: '11111111-1111-1111-1111-111111111111',
+    description: 'JWT payload의 사용자 ID',
+  })
+  userId: string;
+}

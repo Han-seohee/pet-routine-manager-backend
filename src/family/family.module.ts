@@ -7,5 +7,6 @@ import { FamilyService } from './family.service';
   imports: [AuthModule],
   controllers: [FamilyController],
   providers: [FamilyService],
+  exports: [FamilyService],
 })
 export class FamilyModule {}
