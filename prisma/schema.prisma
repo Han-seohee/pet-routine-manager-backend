@@ -34,6 +34,7 @@ model User {
   updatedAt    DateTime     @updatedAt
 
   familyMembers FamilyMember[]
+  routines      Routine[]
 
   @@unique([provider, providerId])
 }
@@ -75,5 +76,45 @@ model Pet {
   image              String?
   registrationNumber String?   @unique
 
-  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  family     Family      @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  categories Category[]
+  routines   Routine[]
+}
+
+model Category {
+  id    String @id @default(uuid()) @db.Uuid
+  petId String @db.Uuid
+  name  String
+
+  pet           Pet           @relation(fields: [petId], references: [id], onDelete: Cascade)
+  subCategories SubCategory[]
+  routines      Routine[]
+
+  @@unique([petId, name])
+}
+
+model SubCategory {
+  id         String @id @default(uuid()) @db.Uuid
+  categoryId String @db.Uuid
+  name       String
+
+  category Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  routines Routine[]
+
+  @@unique([categoryId, name])
+}
+
+model Routine {
+  id            String   @id @default(uuid()) @db.Uuid
+  petId         String   @db.Uuid
+  userId        String   @db.Uuid
+  categoryId    String   @db.Uuid
+  subCategoryId String?  @db.Uuid
+  recordedAt    DateTime @default(now())
+  memo          String?
+
+  pet         Pet          @relation(fields: [petId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subCategory SubCategory? @relation(fields: [subCategoryId], references: [id], onDelete: SetNull)
 }
