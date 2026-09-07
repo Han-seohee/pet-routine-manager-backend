@@ -16,6 +16,7 @@ import { PetService } from './pet.service';
 describe('PetService', () => {
   let petService: PetService;
   let prismaService: {
+    $transaction: jest.Mock;
     familyMember: { findUnique: jest.Mock };
     family: { findUnique: jest.Mock };
     pet: {
@@ -26,6 +27,11 @@ describe('PetService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
+  };
+  let transactionClient: {
+    pet: { create: jest.Mock };
+    category: { create: jest.Mock };
+    subCategory: { create: jest.Mock };
   };
 
   const joinedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -46,6 +52,7 @@ describe('PetService', () => {
     name: '초코',
     birthDate: '2024-01-15T00:00:00.000Z',
     gender: 'MALE' as const,
+    species: 'DOG' as const,
     breed: '푸들',
     image: 'https://example.com/choco.png',
     registrationNumber: '123456789',
@@ -56,13 +63,39 @@ describe('PetService', () => {
     name: '초코',
     birthDate: new Date('2024-01-15T00:00:00.000Z'),
     gender: 'MALE' as const,
+    species: 'DOG' as const,
     breed: '푸들',
     image: 'https://example.com/choco.png',
     registrationNumber: '123456789',
   };
 
   beforeEach(async () => {
+    transactionClient = {
+      pet: {
+        create: jest.fn(),
+      },
+      category: {
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: `category-${args.data.name}`,
+            petId: args.data.petId,
+            name: args.data.name,
+          }),
+        ),
+      },
+      subCategory: {
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: `sub-${args.data.name}`,
+            categoryId: args.data.categoryId,
+            name: args.data.name,
+          }),
+        ),
+      },
+    };
+
     prismaService = {
+      $transaction: jest.fn((callback) => callback(transactionClient)),
       familyMember: {
         findUnique: jest.fn(),
       },
@@ -97,7 +130,7 @@ describe('PetService', () => {
     it('should create a pet when user is OWNER', async () => {
       prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
       prismaService.pet.findUnique.mockResolvedValue(null);
-      prismaService.pet.create.mockResolvedValue(createdPet);
+      transactionClient.pet.create.mockResolvedValue(createdPet);
 
       await expect(
         petService.createPet('user-id', 'family-id', createPetDto),
@@ -108,12 +141,14 @@ describe('PetService', () => {
           userId_familyId: { userId: 'user-id', familyId: 'family-id' },
         },
       });
-      expect(prismaService.pet.create).toHaveBeenCalledWith({
+      expect(prismaService.$transaction).toHaveBeenCalledTimes(1);
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
         data: {
           familyId: 'family-id',
           name: '초코',
           birthDate: new Date('2024-01-15T00:00:00.000Z'),
           gender: 'MALE',
+          species: 'DOG',
           breed: '푸들',
           image: 'https://example.com/choco.png',
           registrationNumber: '123456789',
@@ -130,28 +165,116 @@ describe('PetService', () => {
       };
 
       prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
-      prismaService.pet.create.mockResolvedValue(petWithoutOptionals);
+      transactionClient.pet.create.mockResolvedValue(petWithoutOptionals);
 
       await expect(
         petService.createPet('user-id', 'family-id', {
           name: '초코',
           gender: 'FEMALE',
+          species: 'DOG',
           breed: '푸들',
         }),
       ).resolves.toEqual(petWithoutOptionals);
 
       expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
-      expect(prismaService.pet.create).toHaveBeenCalledWith({
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
         data: {
           familyId: 'family-id',
           name: '초코',
           birthDate: null,
           gender: 'FEMALE',
+          species: 'DOG',
           breed: '푸들',
           image: null,
           registrationNumber: null,
         },
       });
+    });
+
+    it('should create default DOG categories and subcategories in a transaction', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findUnique.mockResolvedValue(null);
+      transactionClient.pet.create.mockResolvedValue(createdPet);
+
+      await petService.createPet('user-id', 'family-id', createPetDto);
+
+      expect(
+        transactionClient.category.create.mock.calls.map(
+          (call) => call[0].data.name,
+        ),
+      ).toEqual(['밥', '배변', '산책', '약']);
+      expect(
+        transactionClient.subCategory.create.mock.calls.map(
+          (call) => call[0].data.name,
+        ),
+      ).toEqual(['사료', '응가', '쉬야']);
+      expect(transactionClient.subCategory.create).toHaveBeenCalledWith({
+        data: {
+          categoryId: 'category-밥',
+          name: '사료',
+        },
+      });
+      expect(transactionClient.subCategory.create).toHaveBeenCalledWith({
+        data: {
+          categoryId: 'category-배변',
+          name: '응가',
+        },
+      });
+      expect(transactionClient.subCategory.create).toHaveBeenCalledWith({
+        data: {
+          categoryId: 'category-배변',
+          name: '쉬야',
+        },
+      });
+    });
+
+    it('should create default CAT categories and subcategories in a transaction', async () => {
+      const catPet = {
+        ...createdPet,
+        species: 'CAT' as const,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findUnique.mockResolvedValue(null);
+      transactionClient.pet.create.mockResolvedValue(catPet);
+
+      await petService.createPet('user-id', 'family-id', {
+        ...createPetDto,
+        species: 'CAT',
+      });
+
+      expect(
+        transactionClient.category.create.mock.calls.map(
+          (call) => call[0].data.name,
+        ),
+      ).toEqual(['밥', '배변', '약']);
+      expect(
+        transactionClient.subCategory.create.mock.calls.map(
+          (call) => call[0].data.name,
+        ),
+      ).toEqual(['사료', '응가', '쉬야']);
+      expect(transactionClient.category.create).not.toHaveBeenCalledWith({
+        data: {
+          petId: 'pet-id',
+          name: '산책',
+        },
+      });
+    });
+
+    it('should not leave a pet when default category creation fails', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findUnique.mockResolvedValue(null);
+      transactionClient.pet.create.mockResolvedValue(createdPet);
+      transactionClient.category.create.mockRejectedValue(
+        new Error('category create failed'),
+      );
+
+      await expect(
+        petService.createPet('user-id', 'family-id', createPetDto),
+      ).rejects.toThrow('category create failed');
+
+      expect(prismaService.$transaction).toHaveBeenCalledTimes(1);
+      expect(transactionClient.pet.create).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when user is MEMBER', async () => {
@@ -166,6 +289,7 @@ describe('PetService', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(prismaService.pet.create).not.toHaveBeenCalled();
+      expect(transactionClient.pet.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when family does not exist', async () => {
@@ -177,6 +301,7 @@ describe('PetService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(prismaService.pet.create).not.toHaveBeenCalled();
+      expect(transactionClient.pet.create).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException when registrationNumber already exists', async () => {
@@ -191,6 +316,7 @@ describe('PetService', () => {
         where: { registrationNumber: '123456789' },
       });
       expect(prismaService.pet.create).not.toHaveBeenCalled();
+      expect(transactionClient.pet.create).not.toHaveBeenCalled();
     });
 
     it('should reject empty pet names', async () => {
@@ -220,6 +346,17 @@ describe('PetService', () => {
         petService.createPet('user-id', 'family-id', {
           ...createPetDto,
           gender: 'UNKNOWN' as 'MALE',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid species', async () => {
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          ...createPetDto,
+          species: 'BIRD' as 'DOG',
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -362,6 +499,7 @@ describe('PetService', () => {
         name: '초코',
         birthDate: createdPet.birthDate,
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
         image: 'https://example.com/choco.png',
         registrationNumber: '123456789',
@@ -372,6 +510,7 @@ describe('PetService', () => {
         'name',
         'birthDate',
         'gender',
+        'species',
         'breed',
         'image',
         'registrationNumber',

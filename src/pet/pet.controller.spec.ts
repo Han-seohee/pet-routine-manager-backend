@@ -22,6 +22,7 @@ describe('PetController', () => {
     name: '초코',
     birthDate: new Date('2024-01-15T00:00:00.000Z'),
     gender: 'MALE' as const,
+    species: 'DOG' as const,
     breed: '푸들',
     image: null,
     registrationNumber: '123456789',
@@ -56,6 +57,7 @@ describe('PetController', () => {
         name: '초코',
         birthDate: '2024-01-15T00:00:00.000Z',
         gender: 'MALE' as const,
+        species: 'DOG' as const,
         breed: '푸들',
         registrationNumber: '123456789',
       };

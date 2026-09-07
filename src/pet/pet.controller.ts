@@ -95,14 +95,14 @@ export class PetController {
   @ApiOperation({
     summary: '반려동물 생성',
     description:
-      'OWNER만 반려동물을 등록할 수 있습니다. birthDate, image, registrationNumber는 생략할 수 있으며 생략 시 null로 저장됩니다.',
+      'OWNER만 반려동물을 등록할 수 있습니다. birthDate, image, registrationNumber는 생략할 수 있으며 생략 시 null로 저장됩니다. species에 따라 기본 Category/SubCategory가 함께 생성됩니다.',
   })
   @ApiBody({ type: CreatePetDto })
   @ApiCreatedResponse({ type: PetResponseDto })
   @ApiResponse({
     status: 400,
     description:
-      'name/breed가 비어 있거나, gender가 유효하지 않거나, birthDate가 유효한 날짜가 아닌 경우',
+      'name/breed가 비어 있거나, gender 또는 species가 유효하지 않거나, birthDate가 유효한 날짜가 아닌 경우',
   })
   @ApiResponse({ status: 403, description: 'OWNER가 아닙니다.' })
   @ApiResponse({ status: 404, description: '가족이 존재하지 않습니다.' })

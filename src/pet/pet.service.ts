@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Pet } from '../../generated/prisma/client';
+import { DEFAULT_PET_CATEGORIES } from '../category/default-pet-categories';
 import { FamilyService } from '../family/family.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreatePetDto } from './dto/create-pet.dto';
@@ -17,6 +18,7 @@ export type PetResult = Pick<
   | 'name'
   | 'birthDate'
   | 'gender'
+  | 'species'
   | 'breed'
   | 'image'
   | 'registrationNumber'
@@ -25,6 +27,7 @@ export type PetResult = Pick<
 export type CreatePetResult = PetResult;
 
 const PET_GENDERS = new Set(['MALE', 'FEMALE']);
+const PET_SPECIES = new Set(['DOG', 'CAT']);
 
 @Injectable()
 export class PetService {
@@ -54,6 +57,10 @@ export class PetService {
       throw new BadRequestException('gender must be MALE or FEMALE');
     }
 
+    if (!PET_SPECIES.has(dto.species)) {
+      throw new BadRequestException('species must be DOG or CAT');
+    }
+
     const birthDate = this.parseOptionalBirthDate(dto.birthDate);
     const image = this.parseOptionalString(dto.image);
     const registrationNumber = this.parseOptionalString(dto.registrationNumber);
@@ -70,16 +77,23 @@ export class PetService {
       }
     }
 
-    const pet = await this.prisma.pet.create({
-      data: {
-        familyId,
-        name,
-        birthDate,
-        gender: dto.gender,
-        breed,
-        image,
-        registrationNumber,
-      },
+    const pet = await this.prisma.$transaction(async (tx) => {
+      const createdPet = await tx.pet.create({
+        data: {
+          familyId,
+          name,
+          birthDate,
+          gender: dto.gender,
+          species: dto.species,
+          breed,
+          image,
+          registrationNumber,
+        },
+      });
+
+      await this.createDefaultCategories(tx, createdPet.id, dto.species);
+
+      return createdPet;
     });
 
     return this.toPetResult(pet);
@@ -188,6 +202,7 @@ export class PetService {
       name: pet.name,
       birthDate: pet.birthDate,
       gender: pet.gender,
+      species: pet.species,
       breed: pet.breed,
       image: pet.image,
       registrationNumber: pet.registrationNumber,
@@ -198,6 +213,7 @@ export class PetService {
     name?: string;
     birthDate?: Date | null;
     gender?: Pet['gender'];
+    species?: Pet['species'];
     breed?: string;
     image?: string | null;
     registrationNumber?: string | null;
@@ -206,6 +222,7 @@ export class PetService {
       dto.name === undefined &&
       dto.birthDate === undefined &&
       dto.gender === undefined &&
+      dto.species === undefined &&
       dto.breed === undefined &&
       dto.image === undefined &&
       dto.registrationNumber === undefined
@@ -217,6 +234,7 @@ export class PetService {
       name?: string;
       birthDate?: Date | null;
       gender?: Pet['gender'];
+      species?: Pet['species'];
       breed?: string;
       image?: string | null;
       registrationNumber?: string | null;
@@ -250,6 +268,14 @@ export class PetService {
       data.gender = dto.gender;
     }
 
+    if (dto.species !== undefined) {
+      if (!PET_SPECIES.has(dto.species)) {
+        throw new BadRequestException('species must be DOG or CAT');
+      }
+
+      data.species = dto.species;
+    }
+
     if (dto.birthDate !== undefined) {
       data.birthDate = this.parseOptionalBirthDate(dto.birthDate);
     }
@@ -265,6 +291,32 @@ export class PetService {
     }
 
     return data;
+  }
+
+  private async createDefaultCategories(
+    tx: Pick<PrismaService, 'category' | 'subCategory'>,
+    petId: string,
+    species: Pet['species'],
+  ): Promise<void> {
+    const defaults = DEFAULT_PET_CATEGORIES[species];
+
+    for (const category of defaults) {
+      const createdCategory = await tx.category.create({
+        data: {
+          petId,
+          name: category.name,
+        },
+      });
+
+      for (const subCategoryName of category.subCategoryNames) {
+        await tx.subCategory.create({
+          data: {
+            categoryId: createdCategory.id,
+            name: subCategoryName,
+          },
+        });
+      }
+    }
   }
 
   private parseOptionalString(value: string | undefined): string | null {

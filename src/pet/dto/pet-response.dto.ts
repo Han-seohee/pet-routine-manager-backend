@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PetGender } from '../../../generated/prisma/enums';
+import { PetGender, PetSpecies } from '../../../generated/prisma/enums';
 
 export class PetResponseDto {
   @ApiProperty({
@@ -32,6 +32,13 @@ export class PetResponseDto {
     example: 'MALE',
   })
   gender: PetGender;
+
+  @ApiProperty({
+    enum: PetSpecies,
+    enumName: 'PetSpecies',
+    example: 'DOG',
+  })
+  species: PetSpecies;
 
   @ApiProperty({ example: '푸들' })
   breed: string;

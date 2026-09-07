@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PetGender } from '../../../generated/prisma/enums';
+import { PetGender, PetSpecies } from '../../../generated/prisma/enums';
 
 export class CreatePetDto {
   @ApiProperty({
@@ -24,6 +24,15 @@ export class CreatePetDto {
     description: '성별. MALE 또는 FEMALE',
   })
   gender: PetGender;
+
+  @ApiProperty({
+    enum: PetSpecies,
+    enumName: 'PetSpecies',
+    example: 'DOG',
+    description:
+      '종. DOG 또는 CAT. 생성 시 기본 Category/SubCategory가 함께 만들어집니다.',
+  })
+  species: PetSpecies;
 
   @ApiProperty({
     example: '푸들',

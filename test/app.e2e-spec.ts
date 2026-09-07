@@ -36,6 +36,30 @@ jest.mock('../src/prisma/prisma.service', () => ({
           ),
           findMany: jest.fn().mockResolvedValue([]),
         },
+        pet: {
+          create: jest.fn().mockImplementation((args) =>
+            Promise.resolve({
+              id: 'new-pet-id',
+              ...args.data,
+            }),
+          ),
+        },
+        category: {
+          create: jest.fn().mockImplementation((args) =>
+            Promise.resolve({
+              id: `new-category-${args.data.name}`,
+              ...args.data,
+            }),
+          ),
+        },
+        subCategory: {
+          create: jest.fn().mockImplementation((args) =>
+            Promise.resolve({
+              id: `new-sub-${args.data.name}`,
+              ...args.data,
+            }),
+          ),
+        },
       };
 
       return callback(tx);
@@ -335,7 +359,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -349,7 +375,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'jwt-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -419,7 +447,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -455,7 +485,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'jwt-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -489,19 +521,23 @@ describe('AppController (e2e)', () => {
 
     jest
       .spyOn(prismaService.familyMember, 'findUnique')
-      .mockImplementation((args: { where: { userId_familyId: { userId: string; familyId: string } } }) => {
-        if (args.where.userId_familyId.userId === 'owner-user-id') {
-          return Promise.resolve({
-            id: 'owner-member-id',
-            userId: 'owner-user-id',
-            familyId,
-            role: 'OWNER',
-            joinedAt: new Date('2026-01-01T00:00:00.000Z'),
-          });
-        }
+      .mockImplementation(
+        (args: {
+          where: { userId_familyId: { userId: string; familyId: string } };
+        }) => {
+          if (args.where.userId_familyId.userId === 'owner-user-id') {
+            return Promise.resolve({
+              id: 'owner-member-id',
+              userId: 'owner-user-id',
+              familyId,
+              role: 'OWNER',
+              joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+            });
+          }
 
-        return Promise.resolve(null);
-      });
+          return Promise.resolve(null);
+        },
+      );
     jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(targetUser);
 
     return request(app.getHttpServer())
@@ -552,7 +588,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -602,25 +640,29 @@ describe('AppController (e2e)', () => {
 
     jest
       .spyOn(prismaService.familyMember, 'findUnique')
-      .mockImplementation((args: { where: { userId_familyId: { userId: string; familyId: string } } }) => {
-        if (args.where.userId_familyId.userId === 'owner-user-id') {
+      .mockImplementation(
+        (args: {
+          where: { userId_familyId: { userId: string; familyId: string } };
+        }) => {
+          if (args.where.userId_familyId.userId === 'owner-user-id') {
+            return Promise.resolve({
+              id: 'owner-member-id',
+              userId: 'owner-user-id',
+              familyId,
+              role: 'OWNER',
+              joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+            });
+          }
+
           return Promise.resolve({
-            id: 'owner-member-id',
-            userId: 'owner-user-id',
+            id: 'existing-member-id',
+            userId: targetUser.id,
             familyId,
-            role: 'OWNER',
+            role: 'MEMBER',
             joinedAt: new Date('2026-01-01T00:00:00.000Z'),
           });
-        }
-
-        return Promise.resolve({
-          id: 'existing-member-id',
-          userId: targetUser.id,
-          familyId,
-          role: 'MEMBER',
-          joinedAt: new Date('2026-01-01T00:00:00.000Z'),
-        });
-      });
+        },
+      );
     jest.spyOn(prismaService.user, 'findUnique').mockResolvedValue(targetUser);
 
     return request(app.getHttpServer())
@@ -698,7 +740,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -776,7 +820,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -791,6 +837,7 @@ describe('AppController (e2e)', () => {
       .send({
         name: '초코',
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
       })
       .expect(401);
@@ -818,6 +865,7 @@ describe('AppController (e2e)', () => {
         name: '초코',
         birthDate: '2024-01-15T00:00:00.000Z',
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
         registrationNumber: '123456789',
       })
@@ -828,6 +876,7 @@ describe('AppController (e2e)', () => {
           familyId,
           name: '초코',
           gender: 'MALE',
+          species: 'DOG',
           breed: '푸들',
           registrationNumber: '123456789',
         });
@@ -860,6 +909,7 @@ describe('AppController (e2e)', () => {
       .send({
         name: '초코',
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
       })
       .expect(403);
@@ -870,7 +920,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -879,6 +931,7 @@ describe('AppController (e2e)', () => {
       .send({
         name: '초코',
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
       })
       .expect(404);
@@ -914,6 +967,7 @@ describe('AppController (e2e)', () => {
       .send({
         name: '초코',
         gender: 'MALE',
+        species: 'DOG',
         breed: '푸들',
         registrationNumber: '123456789',
       })
@@ -1064,7 +1118,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -1078,7 +1134,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -1190,7 +1248,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -1204,7 +1264,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -1349,7 +1411,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -1364,7 +1428,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
@@ -1674,7 +1740,9 @@ describe('AppController (e2e)', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(family);
 
     return request(app.getHttpServer())
@@ -1688,7 +1756,9 @@ describe('AppController (e2e)', () => {
     const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
 
-    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue(null);
+    jest
+      .spyOn(prismaService.familyMember, 'findUnique')
+      .mockResolvedValue(null);
     jest.spyOn(prismaService.family, 'findUnique').mockResolvedValue(null);
 
     return request(app.getHttpServer())
