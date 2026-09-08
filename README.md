@@ -1,6 +1,6 @@
 # pet-routine-manager-backend
 
-NestJS backend for Pet Routine Manager.
+하루멍냥 백엔드. 반려동물의 하루를 간단하게 기록하는 앱.
 
 ## Project setup
 

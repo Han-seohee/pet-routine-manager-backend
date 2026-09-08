@@ -2,7 +2,12 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { FamilyService } from './family.service';
@@ -421,7 +426,10 @@ describe('FamilyService', () => {
         },
       ]);
 
-      const result = await familyService.findFamilyMembers('user-id', family.id);
+      const result = await familyService.findFamilyMembers(
+        'user-id',
+        family.id,
+      );
 
       expect(result[0]).toEqual({
         userId: 'user-id',
@@ -485,7 +493,9 @@ describe('FamilyService', () => {
       prismaService.family.findUnique.mockResolvedValue(family);
 
       await expect(
-        familyService.updateFamily('user-id', 'family-id', { name: 'New Name' }),
+        familyService.updateFamily('user-id', 'family-id', {
+          name: 'New Name',
+        }),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(prismaService.family.update).not.toHaveBeenCalled();

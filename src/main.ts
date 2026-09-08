@@ -11,8 +11,8 @@ async function bootstrap() {
   });
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Pet Routine Manager API')
-    .setDescription('Pet Routine Manager 백엔드 API 문서')
+    .setTitle('하루멍냥')
+    .setDescription('반려동물의 하루를 간단하게 기록하는 앱 API')
     .setVersion('1.0')
     .addBearerAuth(
       {
