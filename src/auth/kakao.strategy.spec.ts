@@ -12,6 +12,7 @@ import type { KakaoUserProfile } from './types/kakao-user-profile.type';
 describe('KakaoStrategy', () => {
   let kakaoStrategy: KakaoStrategy;
   let authService: { findOrCreateUser: jest.Mock };
+  let getOrThrow: jest.Mock;
 
   const user = {
     id: 'user-id',
@@ -43,6 +44,17 @@ describe('KakaoStrategy', () => {
     authService = {
       findOrCreateUser: jest.fn(),
     };
+    getOrThrow = jest.fn((key: string) => {
+      if (key === 'KAKAO_CLIENT_ID') {
+        return 'test-kakao-client-id';
+      }
+
+      if (key === 'KAKAO_CLIENT_SECRET') {
+        return 'test-kakao-client-secret';
+      }
+
+      throw new Error(`Missing config: ${key}`);
+    });
 
     const app: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,13 +69,7 @@ describe('KakaoStrategy', () => {
 
               return defaultValue;
             }),
-            getOrThrow: jest.fn((key: string) => {
-              if (key === 'KAKAO_CLIENT_ID') {
-                return 'test-kakao-client-id';
-              }
-
-              throw new Error(`Missing config: ${key}`);
-            }),
+            getOrThrow,
           },
         },
         {
@@ -74,6 +80,10 @@ describe('KakaoStrategy', () => {
     }).compile();
 
     kakaoStrategy = app.get<KakaoStrategy>(KakaoStrategy);
+  });
+
+  it('should pass clientSecret from KAKAO_CLIENT_SECRET', () => {
+    expect(getOrThrow).toHaveBeenCalledWith('KAKAO_CLIENT_SECRET');
   });
 
   describe('validate', () => {

@@ -14,6 +14,11 @@ jest.mock('../src/prisma/prisma.service', () => ({
         }),
       ),
     },
+    authorizationCode: {
+      create: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
     $transaction: jest.fn().mockImplementation(async (callback) => {
       const tx = {
         family: {
@@ -120,6 +125,7 @@ process.env.GOOGLE_CLIENT_ID =
 process.env.GOOGLE_CLIENT_SECRET =
   process.env.GOOGLE_CLIENT_SECRET ?? 'test-google-client-secret';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret';
+process.env.FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 process.env.KAKAO_CLIENT_ID =
   process.env.KAKAO_CLIENT_ID ?? 'test-kakao-client-id';
 
@@ -195,6 +201,13 @@ describe('AppController (e2e)', () => {
       .expect((response) => {
         expect(response.headers.location).toContain('kauth.kakao.com');
       });
+  });
+
+  it('/auth/token (POST) rejects an invalid authorization code', () => {
+    return request(app.getHttpServer())
+      .post('/auth/token')
+      .send({ code: 'invalid-code' })
+      .expect(401);
   });
 
   it('/auth/me (GET) rejects requests without JWT', () => {

@@ -38,10 +38,22 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  familyMembers FamilyMember[]
-  routines      Routine[]
+  familyMembers      FamilyMember[]
+  routines           Routine[]
+  authorizationCodes AuthorizationCode[]
 
   @@unique([provider, providerId])
+}
+
+model AuthorizationCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  codeHash  String    @unique
+  userId    String    @db.Uuid
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Family {

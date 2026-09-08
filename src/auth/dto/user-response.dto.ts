@@ -59,17 +59,6 @@ export class OAuthLoginResponseDto {
   user: UserResponseDto;
 }
 
-export class OAuthCallbackResponseDto {
-  @ApiProperty({ type: UserResponseDto })
-  user: UserResponseDto;
-
-  @ApiProperty({
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-    description: '이후 API 호출에 사용하는 JWT access token',
-  })
-  accessToken: string;
-}
-
 export class CurrentUserResponseDto {
   @ApiProperty({
     format: 'uuid',

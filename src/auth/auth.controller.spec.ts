@@ -2,13 +2,19 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let authController: AuthController;
-  let authService: { findOrCreateUser: jest.Mock; signAccessToken: jest.Mock };
+  let authService: {
+    findOrCreateUser: jest.Mock;
+    signAccessToken: jest.Mock;
+    createAuthorizationCode: jest.Mock;
+    exchangeAuthorizationCode: jest.Mock;
+  };
 
   const oauthProfile = {
     provider: 'KAKAO' as const,
@@ -29,6 +35,8 @@ describe('AuthController', () => {
     authService = {
       findOrCreateUser: jest.fn(),
       signAccessToken: jest.fn(),
+      createAuthorizationCode: jest.fn(),
+      exchangeAuthorizationCode: jest.fn(),
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -37,6 +45,18 @@ describe('AuthController', () => {
         {
           provide: AuthService,
           useValue: authService,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn((key: string) => {
+              if (key === 'FRONTEND_URL') {
+                return 'http://localhost:3000';
+              }
+
+              throw new Error(`Missing config: ${key}`);
+            }),
+          },
         },
       ],
     }).compile();
@@ -56,29 +76,34 @@ describe('AuthController', () => {
   });
 
   describe('google/callback', () => {
-    it('should return the authenticated user and access token', () => {
+    it('should redirect to FRONTEND_URL with an app authorization code', async () => {
       const googleUser = {
         ...user,
         provider: 'GOOGLE' as const,
         providerId: 'google-789',
       };
 
-      authService.signAccessToken.mockReturnValue('signed-access-token');
+      authService.createAuthorizationCode.mockResolvedValue(
+        'app-authorization-code',
+      );
 
-      expect(
+      await expect(
         authController.googleAuthCallback({
           user: googleUser,
         } as Parameters<AuthController['googleAuthCallback']>[0]),
-      ).toEqual({
-        user: googleUser,
-        accessToken: 'signed-access-token',
+      ).resolves.toEqual({
+        url: 'http://localhost:3000/auth/callback?code=app-authorization-code',
+        statusCode: 302,
       });
-      expect(authService.signAccessToken).toHaveBeenCalledWith(googleUser);
+      expect(authService.createAuthorizationCode).toHaveBeenCalledWith(
+        googleUser,
+      );
+      expect(authService.signAccessToken).not.toHaveBeenCalled();
     });
   });
 
   describe('kakao/callback', () => {
-    it('should return the authenticated user and access token', () => {
+    it('should redirect to FRONTEND_URL with an app authorization code', async () => {
       const kakaoUser = {
         ...user,
         provider: 'KAKAO' as const,
@@ -86,17 +111,41 @@ describe('AuthController', () => {
         email: null,
       };
 
-      authService.signAccessToken.mockReturnValue('signed-kakao-access-token');
+      authService.createAuthorizationCode.mockResolvedValue(
+        'app-authorization-code',
+      );
 
-      expect(
+      await expect(
         authController.kakaoAuthCallback({
           user: kakaoUser,
         } as Parameters<AuthController['kakaoAuthCallback']>[0]),
-      ).toEqual({
-        user: kakaoUser,
-        accessToken: 'signed-kakao-access-token',
+      ).resolves.toEqual({
+        url: 'http://localhost:3000/auth/callback?code=app-authorization-code',
+        statusCode: 302,
       });
-      expect(authService.signAccessToken).toHaveBeenCalledWith(kakaoUser);
+      expect(authService.createAuthorizationCode).toHaveBeenCalledWith(
+        kakaoUser,
+      );
+      expect(authService.signAccessToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('token', () => {
+    it('should exchange an authorization code for a JWT', async () => {
+      authService.exchangeAuthorizationCode.mockResolvedValue({
+        accessToken: 'signed-access-token',
+      });
+
+      await expect(
+        authController.exchangeAuthorizationCode({
+          code: 'app-authorization-code',
+        }),
+      ).resolves.toEqual({
+        accessToken: 'signed-access-token',
+      });
+      expect(authService.exchangeAuthorizationCode).toHaveBeenCalledWith(
+        'app-authorization-code',
+      );
     });
   });
 
