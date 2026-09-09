@@ -67,3 +67,11 @@ export class CurrentUserResponseDto {
   })
   userId: string;
 }
+
+export class LogoutResponseDto {
+  @ApiProperty({
+    example: true,
+    description: 'Logout 처리 완료 여부. Cookie가 없어도 true입니다.',
+  })
+  ok: boolean;
+}

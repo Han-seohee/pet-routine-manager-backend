@@ -1,5 +1,24 @@
 jest.mock('../src/prisma/prisma.service', () => ({
-  PrismaService: jest.fn().mockImplementation(() => ({
+  PrismaService: jest.fn().mockImplementation(() => {
+    const refreshToken = {
+      create: jest.fn().mockImplementation((args) =>
+        Promise.resolve({
+          id: 'new-refresh-token-id',
+          tokenHash: args.data.tokenHash,
+          userId: args.data.userId,
+          expiresAt: args.data.expiresAt,
+          revokedAt: args.data.revokedAt ?? null,
+          replacedByTokenId: args.data.replacedByTokenId ?? null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+      ),
+      findUnique: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      delete: jest.fn(),
+    };
+
+    return {
     onModuleInit: jest.fn().mockResolvedValue(undefined),
     onModuleDestroy: jest.fn().mockResolvedValue(undefined),
     pingDatabase: jest.fn().mockResolvedValue(undefined),
@@ -19,6 +38,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       findUnique: jest.fn().mockResolvedValue(null),
     },
+    refreshToken,
     $transaction: jest.fn().mockImplementation(async (callback) => {
       const tx = {
         family: {
@@ -65,6 +85,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
             }),
           ),
         },
+        refreshToken,
       };
 
       return callback(tx);
@@ -117,7 +138,8 @@ jest.mock('../src/prisma/prisma.service', () => ({
       ),
       delete: jest.fn().mockResolvedValue(undefined),
     },
-  })),
+  };
+  }),
 }));
 
 process.env.GOOGLE_CLIENT_ID =
@@ -130,6 +152,7 @@ process.env.KAKAO_CLIENT_ID =
   process.env.KAKAO_CLIENT_ID ?? 'test-kakao-client-id';
 
 import { JwtService } from '@nestjs/jwt';
+import { createHash } from 'node:crypto';
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
@@ -149,6 +172,61 @@ describe('AppController (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
   });
+
+  const refreshUser = {
+    id: 'refresh-user-id',
+    provider: 'GOOGLE' as const,
+    providerId: 'google-refresh-123',
+    email: 'refresh@example.com',
+    displayName: 'Refresh User',
+    profileImage: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+  };
+
+  const mockRefreshTokenLookup = (
+    prismaService: PrismaService,
+    tokens: Array<{
+      id: string;
+      tokenHash?: string;
+      userId: string;
+      replacedByTokenId: string | null;
+      revokedAt: Date | null;
+      expiresAt?: Date;
+      createdAt?: Date;
+      user?: typeof refreshUser | null;
+    }>,
+  ) => {
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockImplementation(
+      (args: {
+        where?: { tokenHash?: string; id?: string; replacedByTokenId?: string };
+      }) => {
+        const where = args.where ?? {};
+
+        if (where.tokenHash) {
+          return Promise.resolve(
+            tokens.find((token) => token.tokenHash === where.tokenHash) ?? null,
+          );
+        }
+
+        if (where.id) {
+          return Promise.resolve(
+            tokens.find((token) => token.id === where.id) ?? null,
+          );
+        }
+
+        if (where.replacedByTokenId) {
+          return Promise.resolve(
+            tokens.find(
+              (token) => token.replacedByTokenId === where.replacedByTokenId,
+            ) ?? null,
+          );
+        }
+
+        return Promise.resolve(null);
+      },
+    );
+  };
 
   it('/health (GET)', () => {
     return request(app.getHttpServer())
@@ -208,6 +286,859 @@ describe('AppController (e2e)', () => {
       .post('/auth/token')
       .send({ code: 'invalid-code' })
       .expect(401);
+  });
+
+  it('/auth/token (POST) issues an access token and refresh token cookie', async () => {
+    const prismaService = app.get(PrismaService);
+    const user = {
+      id: 'token-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-token-123',
+      email: 'token@example.com',
+      displayName: 'Token User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const thirtyDaysSeconds = 30 * 24 * 60 * 60;
+
+    jest
+      .spyOn(prismaService.authorizationCode, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+    jest.spyOn(prismaService.authorizationCode, 'findUnique').mockResolvedValue(
+      {
+        id: 'authorization-code-id',
+        codeHash: 'hashed-code',
+        userId: user.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        usedAt: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user,
+      },
+    );
+    const refreshTokenCreate = jest
+      .spyOn(prismaService.refreshToken, 'create')
+      .mockResolvedValue({
+        id: 'refresh-token-id',
+        tokenHash: 'hashed-refresh-token',
+        userId: user.id,
+        expiresAt: new Date('2026-02-01T00:00:00.000Z'),
+        revokedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+    const before = Date.now();
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/token')
+      .send({ code: 'valid-app-authorization-code' })
+      .expect(201);
+
+    const after = Date.now();
+    const setCookie = response.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie)
+      ? setCookie
+      : setCookie
+        ? [setCookie]
+        : [];
+    const refreshCookie = cookies.find((cookie) =>
+      cookie.startsWith('prm_refresh_token='),
+    );
+    const rawToken = decodeURIComponent(
+      refreshCookie?.split(';')[0]?.slice('prm_refresh_token='.length) ?? '',
+    );
+    const saved = (
+      refreshTokenCreate.mock.calls[0] as [
+        {
+          data: {
+            tokenHash: string;
+            userId: string;
+            expiresAt: Date;
+            revokedAt: null;
+          };
+        },
+      ]
+    )[0].data;
+
+    expect(response.body.accessToken).toEqual(expect.any(String));
+    expect(response.body).not.toHaveProperty('refreshToken');
+    expect(refreshCookie).toBeDefined();
+    expect(refreshCookie).toContain('HttpOnly');
+    expect(refreshCookie).toContain(`Max-Age=${thirtyDaysSeconds}`);
+    expect(refreshCookie).toContain('Path=/');
+    expect(refreshCookie).toContain('SameSite=Lax');
+    expect(rawToken.length).toBeGreaterThanOrEqual(43);
+    expect(refreshTokenCreate).toHaveBeenCalledTimes(1);
+    expect(saved.tokenHash).toBe(
+      createHash('sha256').update(rawToken).digest('hex'),
+    );
+    expect(saved.tokenHash).not.toBe(rawToken);
+    expect(saved.userId).toBe(user.id);
+    expect(saved.revokedAt).toBeNull();
+    expect(JSON.stringify(saved)).not.toContain(rawToken);
+    expect(saved.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      before + thirtyDaysMs,
+    );
+    expect(saved.expiresAt.getTime()).toBeLessThanOrEqual(after + thirtyDaysMs);
+  });
+
+  it('/auth/refresh (POST) rotates the refresh token and returns new tokens', async () => {
+    const prismaService = app.get(PrismaService);
+    const user = {
+      id: 'refresh-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-refresh-123',
+      email: 'refresh@example.com',
+      displayName: 'Refresh User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    let refreshTokenCreateCount = 0;
+
+    jest
+      .spyOn(prismaService.authorizationCode, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+    jest.spyOn(prismaService.authorizationCode, 'findUnique').mockResolvedValue(
+      {
+        id: 'authorization-code-id',
+        codeHash: 'hashed-code',
+        userId: user.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        usedAt: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user,
+      },
+    );
+    const refreshTokenCreate = jest
+      .spyOn(prismaService.refreshToken, 'create')
+      .mockImplementation((args: { data: Record<string, unknown> }) => {
+        refreshTokenCreateCount += 1;
+
+        return Promise.resolve({
+          id:
+            refreshTokenCreateCount === 1
+              ? 'refresh-token-a-id'
+              : 'refresh-token-b-id',
+          tokenHash: args.data.tokenHash,
+          userId: args.data.userId,
+          expiresAt: args.data.expiresAt,
+          revokedAt: args.data.revokedAt ?? null,
+          replacedByTokenId: args.data.replacedByTokenId ?? null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        });
+      });
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    const tokenResponse = await request(app.getHttpServer())
+      .post('/auth/token')
+      .send({ code: 'valid-app-authorization-code' })
+      .expect(201);
+
+    const setCookie = tokenResponse.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie)
+      ? setCookie
+      : setCookie
+        ? [setCookie]
+        : [];
+    const refreshCookie = cookies.find((cookie) =>
+      cookie.startsWith('prm_refresh_token='),
+    );
+    const rawTokenA = decodeURIComponent(
+      refreshCookie?.split(';')[0]?.slice('prm_refresh_token='.length) ?? '',
+    );
+    const savedA = (
+      refreshTokenCreate.mock.calls[0] as [
+        {
+          data: {
+            tokenHash: string;
+            userId: string;
+            expiresAt: Date;
+            revokedAt: null;
+          };
+        },
+      ]
+    )[0].data;
+    const storedRefreshTokenA = {
+      id: 'refresh-token-a-id',
+      tokenHash: savedA.tokenHash,
+      userId: savedA.userId,
+      expiresAt: savedA.expiresAt,
+      revokedAt: savedA.revokedAt,
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      user,
+    };
+
+    jest
+      .spyOn(prismaService.refreshToken, 'findUnique')
+      .mockResolvedValue(storedRefreshTokenA);
+
+    const before = Date.now();
+    const refreshResponse = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawTokenA}`)
+      .expect(200);
+    const after = Date.now();
+
+    const jwtService = app.get(JwtService);
+    const savedB = (
+      refreshTokenCreate.mock.calls[1] as [
+        {
+          data: {
+            tokenHash: string;
+            userId: string;
+            expiresAt: Date;
+            revokedAt: null;
+          };
+        },
+      ]
+    )[0].data;
+    const rotated = (
+      refreshTokenUpdateMany.mock.calls[0] as [
+        {
+          where: { id: string; revokedAt: null };
+          data: { revokedAt: Date; replacedByTokenId: string };
+        },
+      ]
+    )[0];
+    const rawTokenB = refreshResponse.body.refreshToken as string;
+
+    expect(refreshResponse.body.accessToken).toEqual(expect.any(String));
+    expect(rawTokenB).toEqual(expect.any(String));
+    expect(rawTokenB).not.toBe(rawTokenA);
+    expect(jwtService.verify(refreshResponse.body.accessToken)).toMatchObject({
+      sub: user.id,
+    });
+    expect(refreshResponse.headers['set-cookie']).toBeUndefined();
+    expect(savedB.tokenHash).toBe(
+      createHash('sha256').update(rawTokenB).digest('hex'),
+    );
+    expect(savedB.tokenHash).not.toBe(rawTokenB);
+    expect(savedB.userId).toBe(savedA.userId);
+    expect(savedB.revokedAt).toBeNull();
+    expect(savedB.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      before + thirtyDaysMs,
+    );
+    expect(savedB.expiresAt.getTime()).toBeLessThanOrEqual(
+      after + thirtyDaysMs,
+    );
+    expect(JSON.stringify(savedB)).not.toContain(rawTokenB);
+    expect(rotated.where.id).toBe('refresh-token-a-id');
+    expect(rotated.where.revokedAt).toBeNull();
+    expect(rotated.data.revokedAt).toBeInstanceOf(Date);
+    expect(rotated.data.replacedByTokenId).toBe('refresh-token-b-id');
+    expect(refreshTokenCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('/auth/refresh (POST) does not rotate another device refresh token', async () => {
+    const prismaService = app.get(PrismaService);
+    const user = {
+      id: 'refresh-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-refresh-123',
+      email: 'refresh@example.com',
+      displayName: 'Refresh User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const refreshTokenA = 'device-a-refresh-token';
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'refresh-token-a-id',
+      tokenHash: createHash('sha256').update(refreshTokenA).digest('hex'),
+      userId: user.id,
+      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      revokedAt: null,
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      user,
+    });
+    jest.spyOn(prismaService.refreshToken, 'create').mockResolvedValue({
+      id: 'refresh-token-b-id',
+      tokenHash: 'hashed-b',
+      userId: user.id,
+      expiresAt: new Date('2026-10-09T00:00:00.000Z'),
+      revokedAt: null,
+      replacedByTokenId: null,
+      createdAt: new Date('2026-09-09T00:00:00.000Z'),
+    });
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${refreshTokenA}`)
+      .expect(200);
+
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'refresh-token-a-id',
+        revokedAt: null,
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: {
+        revokedAt: expect.any(Date),
+        replacedByTokenId: 'refresh-token-b-id',
+      },
+    });
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'refresh-token-x-id' }),
+      }),
+    );
+  });
+
+  it('/auth/refresh (POST) rejects a missing refresh token cookie', () => {
+    return request(app.getHttpServer()).post('/auth/refresh').expect(401);
+  });
+
+  it('/auth/refresh (POST) rejects an unknown refresh token', () => {
+    return request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', 'prm_refresh_token=unknown-refresh-token')
+      .expect(401);
+  });
+
+  it('/auth/refresh (POST) rejects an expired refresh token without rotating', async () => {
+    const prismaService = app.get(PrismaService);
+    const refreshToken = 'expired-refresh-token';
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest.spyOn(
+      prismaService.refreshToken,
+      'updateMany',
+    );
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'expired-refresh-token-id',
+      tokenHash: createHash('sha256').update(refreshToken).digest('hex'),
+      userId: 'refresh-user-id',
+      expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+      revokedAt: null,
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      user: {
+        id: 'refresh-user-id',
+        provider: 'GOOGLE',
+        providerId: 'google-refresh-123',
+        email: 'refresh@example.com',
+        displayName: 'Refresh User',
+        profileImage: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${refreshToken}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('/auth/refresh (POST) rejects a revoked refresh token without reuse detection', async () => {
+    const prismaService = app.get(PrismaService);
+    const refreshToken = 'revoked-without-rotation-token';
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest.spyOn(
+      prismaService.refreshToken,
+      'updateMany',
+    );
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'revoked-refresh-token-id',
+      tokenHash: createHash('sha256').update(refreshToken).digest('hex'),
+      userId: refreshUser.id,
+      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      revokedAt: new Date('2026-02-01T00:00:00.000Z'),
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      user: refreshUser,
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${refreshToken}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('/auth/refresh (POST) revokes the full chain when a rotated token is reused', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenA = 'rotated-token-a';
+    const tokens = [
+      {
+        id: 'token-a-id',
+        tokenHash: createHash('sha256').update(rawTokenA).digest('hex'),
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-01T00:00:00.000Z'),
+        replacedByTokenId: 'token-b-id',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-b-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-02T00:00:00.000Z'),
+        replacedByTokenId: 'token-c-id',
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-c-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: null,
+        replacedByTokenId: null,
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        user: refreshUser,
+      },
+    ];
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 3 });
+
+    mockRefreshTokenLookup(prismaService, tokens);
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawTokenA}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['token-a-id', 'token-b-id', 'token-c-id'] },
+        userId: refreshUser.id,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('/auth/refresh (POST) revokes the latest token when a middle chain token is reused', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenB = 'rotated-token-b';
+    const tokens = [
+      {
+        id: 'token-a-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-01T00:00:00.000Z'),
+        replacedByTokenId: 'token-b-id',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-b-id',
+        tokenHash: createHash('sha256').update(rawTokenB).digest('hex'),
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-02T00:00:00.000Z'),
+        replacedByTokenId: 'token-c-id',
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-c-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-03T00:00:00.000Z'),
+        replacedByTokenId: 'token-d-id',
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-d-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: null,
+        replacedByTokenId: null,
+        createdAt: new Date('2026-01-04T00:00:00.000Z'),
+        user: refreshUser,
+      },
+    ];
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 4 });
+
+    mockRefreshTokenLookup(prismaService, tokens);
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawTokenB}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ['token-a-id', 'token-b-id', 'token-c-id', 'token-d-id'],
+        },
+        userId: refreshUser.id,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('/auth/refresh (POST) does not revoke another device chain on reuse', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenA = 'device-1-token-a';
+    const tokens = [
+      {
+        id: 'token-a-id',
+        tokenHash: createHash('sha256').update(rawTokenA).digest('hex'),
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-01T00:00:00.000Z'),
+        replacedByTokenId: 'token-b-id',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-b-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-02T00:00:00.000Z'),
+        replacedByTokenId: 'token-c-id',
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-c-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: null,
+        replacedByTokenId: null,
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-x-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: new Date('2026-09-01T00:00:00.000Z'),
+        replacedByTokenId: 'token-y-id',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        user: refreshUser,
+      },
+      {
+        id: 'token-y-id',
+        userId: refreshUser.id,
+        expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+        revokedAt: null,
+        replacedByTokenId: null,
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        user: refreshUser,
+      },
+    ];
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 3 });
+
+    mockRefreshTokenLookup(prismaService, tokens);
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawTokenA}`)
+      .expect(401);
+
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['token-a-id', 'token-b-id', 'token-c-id'] },
+        userId: refreshUser.id,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: expect.objectContaining({
+            in: expect.arrayContaining(['token-x-id', 'token-y-id']),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('/auth/refresh (POST) rejects the latest token after reuse revoked its chain', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenC = 'revoked-latest-token-c';
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest.spyOn(
+      prismaService.refreshToken,
+      'updateMany',
+    );
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'token-c-id',
+      tokenHash: createHash('sha256').update(rawTokenC).digest('hex'),
+      userId: refreshUser.id,
+      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      revokedAt: new Date('2026-09-09T00:00:00.000Z'),
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      user: refreshUser,
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawTokenC}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('/auth/refresh (POST) allows only one concurrent rotation of the same token', async () => {
+    const prismaService = app.get(PrismaService);
+    const user = {
+      id: 'refresh-user-id',
+      provider: 'GOOGLE' as const,
+      providerId: 'google-refresh-123',
+      email: 'refresh@example.com',
+      displayName: 'Refresh User',
+      profileImage: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const refreshTokenA = 'concurrent-refresh-token';
+    let revoked = false;
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'refresh-token-a-id',
+      tokenHash: createHash('sha256').update(refreshTokenA).digest('hex'),
+      userId: user.id,
+      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      revokedAt: null,
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      user,
+    });
+    jest.spyOn(prismaService.refreshToken, 'create').mockImplementation(
+      (args: { data: Record<string, unknown> }) =>
+        Promise.resolve({
+          id: revoked ? 'refresh-token-c-id' : 'refresh-token-b-id',
+          tokenHash: args.data.tokenHash,
+          userId: args.data.userId,
+          expiresAt: args.data.expiresAt,
+          revokedAt: null,
+          replacedByTokenId: null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        }),
+    );
+    jest.spyOn(prismaService.refreshToken, 'updateMany').mockImplementation(
+      () => {
+        if (revoked) {
+          return Promise.resolve({ count: 0 });
+        }
+
+        revoked = true;
+
+        return Promise.resolve({ count: 1 });
+      },
+    );
+
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', `prm_refresh_token=${refreshTokenA}`),
+      request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', `prm_refresh_token=${refreshTokenA}`),
+    ]);
+    const statuses = responses.map((response) => response.status).sort();
+    const successful = responses.filter((response) => response.status === 200);
+
+    expect(statuses).toEqual([200, 401]);
+    expect(successful).toHaveLength(1);
+    expect(successful[0]?.body.refreshToken).toEqual(expect.any(String));
+    expect(prismaService.refreshToken.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('/auth/logout (POST) revokes the current refresh token', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawToken = 'active-refresh-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    const response = await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', `prm_refresh_token=${rawToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual({ ok: true });
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        tokenHash,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('/auth/logout (POST) does not revoke another device refresh token', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenC = 'device-1-token-c';
+    const tokenHash = createHash('sha256').update(rawTokenC).digest('hex');
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', `prm_refresh_token=${rawTokenC}`)
+      .expect(200)
+      .expect({ ok: true });
+
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        tokenHash,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it('/auth/logout (POST) keeps replacedByTokenId when logging out the current token', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawTokenC = 'current-chain-token-c';
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', `prm_refresh_token=${rawTokenC}`)
+      .expect(200);
+
+    const revoked = refreshTokenUpdateMany.mock.calls[0][0] as {
+      data: { revokedAt: Date; replacedByTokenId?: string };
+    };
+
+    expect(revoked.data.revokedAt).toBeInstanceOf(Date);
+    expect(revoked.data).not.toHaveProperty('replacedByTokenId');
+  });
+
+  it('/auth/logout (POST) succeeds for an already revoked token', async () => {
+    const prismaService = app.get(PrismaService);
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 0 });
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', 'prm_refresh_token=already-revoked-token')
+      .expect(200)
+      .expect({ ok: true });
+
+    expect(refreshTokenUpdateMany).toHaveBeenCalledTimes(1);
+    expect(prismaService.refreshToken.update).not.toHaveBeenCalled();
+  });
+
+  it('/auth/logout (POST) succeeds for an unknown refresh token', async () => {
+    const prismaService = app.get(PrismaService);
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 0 });
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', 'prm_refresh_token=invalid-token')
+      .expect(200)
+      .expect({ ok: true });
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+  });
+
+  it('/auth/logout (POST) succeeds without a refresh token cookie', async () => {
+    const prismaService = app.get(PrismaService);
+    const refreshTokenUpdateMany = jest.spyOn(
+      prismaService.refreshToken,
+      'updateMany',
+    );
+
+    await request(app.getHttpServer()).post('/auth/logout').expect(200).expect({
+      ok: true,
+    });
+
+    expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('/auth/logout then /auth/refresh rejects the same token without reuse detection', async () => {
+    const prismaService = app.get(PrismaService);
+    const rawToken = 'logout-then-refresh-token';
+    const refreshTokenCreate = jest.spyOn(prismaService.refreshToken, 'create');
+    const refreshTokenUpdateMany = jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockResolvedValue({ count: 1 });
+
+    jest.spyOn(prismaService.refreshToken, 'findUnique').mockResolvedValue({
+      id: 'token-c-id',
+      tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+      userId: refreshUser.id,
+      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      revokedAt: new Date('2026-09-09T00:00:00.000Z'),
+      replacedByTokenId: null,
+      createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      user: refreshUser,
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .set('Cookie', `prm_refresh_token=${rawToken}`)
+      .expect(200)
+      .expect({ ok: true });
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', `prm_refresh_token=${rawToken}`)
+      .expect(401);
+
+    expect(refreshTokenCreate).not.toHaveBeenCalled();
+    expect(refreshTokenUpdateMany).toHaveBeenCalledTimes(1);
+    expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+      where: {
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: expect.any(Date),
+      },
+    });
   });
 
   it('/auth/me (GET) rejects requests without JWT', () => {

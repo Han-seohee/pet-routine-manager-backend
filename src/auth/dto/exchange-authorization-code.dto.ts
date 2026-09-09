@@ -16,3 +16,18 @@ export class AccessTokenResponseDto {
   })
   accessToken: string;
 }
+
+export class AuthTokensResponseDto {
+  @ApiProperty({
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    description: '이후 API 호출에 사용하는 JWT access token',
+  })
+  accessToken: string;
+
+  @ApiProperty({
+    example: 'n3xT1meRefreshTokenExampleValue',
+    description:
+      'Rotation으로 새로 발급된 Refresh Token. Next.js Route Handler가 prm_refresh_token Cookie로 저장한다.',
+  })
+  refreshToken: string;
+}

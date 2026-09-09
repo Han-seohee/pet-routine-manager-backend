@@ -2,6 +2,7 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
@@ -14,6 +15,8 @@ describe('AuthController', () => {
     signAccessToken: jest.Mock;
     createAuthorizationCode: jest.Mock;
     exchangeAuthorizationCode: jest.Mock;
+    refreshAccessToken: jest.Mock;
+    logout: jest.Mock;
   };
 
   const oauthProfile = {
@@ -37,6 +40,8 @@ describe('AuthController', () => {
       signAccessToken: jest.fn(),
       createAuthorizationCode: jest.fn(),
       exchangeAuthorizationCode: jest.fn(),
+      refreshAccessToken: jest.fn(),
+      logout: jest.fn(),
     };
 
     const app: TestingModule = await Test.createTestingModule({
@@ -131,21 +136,145 @@ describe('AuthController', () => {
   });
 
   describe('token', () => {
-    it('should exchange an authorization code for a JWT', async () => {
+    it('should exchange an authorization code for a JWT and set a refresh cookie', async () => {
       authService.exchangeAuthorizationCode.mockResolvedValue({
         accessToken: 'signed-access-token',
+        refreshToken: 'opaque-refresh-token',
       });
+      const res = {
+        cookie: jest.fn(),
+      };
 
       await expect(
-        authController.exchangeAuthorizationCode({
-          code: 'app-authorization-code',
-        }),
+        authController.exchangeAuthorizationCode(
+          {
+            code: 'app-authorization-code',
+          },
+          res as unknown as Parameters<
+            AuthController['exchangeAuthorizationCode']
+          >[1],
+        ),
       ).resolves.toEqual({
         accessToken: 'signed-access-token',
       });
       expect(authService.exchangeAuthorizationCode).toHaveBeenCalledWith(
         'app-authorization-code',
       );
+      expect(res.cookie).toHaveBeenCalledWith(
+        'prm_refresh_token',
+        'opaque-refresh-token',
+        {
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+          secure: false,
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        },
+      );
+    });
+  });
+
+  describe('refresh', () => {
+    it('should read prm_refresh_token from the Cookie header', async () => {
+      authService.refreshAccessToken.mockResolvedValue({
+        accessToken: 'new-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+
+      await authController.refreshAccessToken({
+        headers: {
+          cookie: 'other=value; prm_refresh_token=opaque-refresh-token',
+        },
+      } as Parameters<AuthController['refreshAccessToken']>[0]);
+
+      expect(authService.refreshAccessToken).toHaveBeenCalledWith(
+        'opaque-refresh-token',
+      );
+    });
+
+    it('should return rotated access and refresh tokens', async () => {
+      authService.refreshAccessToken.mockResolvedValue({
+        accessToken: 'new-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+
+      await expect(
+        authController.refreshAccessToken({
+          headers: {
+            cookie: 'prm_refresh_token=opaque-refresh-token',
+          },
+        } as Parameters<AuthController['refreshAccessToken']>[0]),
+      ).resolves.toEqual({
+        accessToken: 'new-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+    });
+
+    it('should reject a missing refresh token cookie with 401', async () => {
+      authService.refreshAccessToken.mockRejectedValue(
+        new UnauthorizedException(),
+      );
+
+      await expect(
+        authController.refreshAccessToken({
+          headers: {},
+        } as Parameters<AuthController['refreshAccessToken']>[0]),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(authService.refreshAccessToken).toHaveBeenCalledWith(undefined);
+    });
+
+    it('should reject an invalid refresh token with 401', async () => {
+      authService.refreshAccessToken.mockRejectedValue(
+        new UnauthorizedException(),
+      );
+
+      await expect(
+        authController.refreshAccessToken({
+          headers: {
+            cookie: 'prm_refresh_token=invalid-refresh-token',
+          },
+        } as Parameters<AuthController['refreshAccessToken']>[0]),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(authService.refreshAccessToken).toHaveBeenCalledWith(
+        'invalid-refresh-token',
+      );
+    });
+  });
+
+  describe('logout', () => {
+    it('should read prm_refresh_token from the Cookie header', async () => {
+      authService.logout.mockResolvedValue({ ok: true });
+
+      await authController.logout({
+        headers: {
+          cookie: 'other=value; prm_refresh_token=opaque-refresh-token',
+        },
+      } as Parameters<AuthController['logout']>[0]);
+
+      expect(authService.logout).toHaveBeenCalledWith('opaque-refresh-token');
+    });
+
+    it('should return ok without exposing the refresh token', async () => {
+      authService.logout.mockResolvedValue({ ok: true });
+
+      await expect(
+        authController.logout({
+          headers: {
+            cookie: 'prm_refresh_token=opaque-refresh-token',
+          },
+        } as Parameters<AuthController['logout']>[0]),
+      ).resolves.toEqual({ ok: true });
+    });
+
+    it('should succeed when the refresh token cookie is missing', async () => {
+      authService.logout.mockResolvedValue({ ok: true });
+
+      await expect(
+        authController.logout({
+          headers: {},
+        } as Parameters<AuthController['logout']>[0]),
+      ).resolves.toEqual({ ok: true });
+      expect(authService.logout).toHaveBeenCalledWith(undefined);
     });
   });
 

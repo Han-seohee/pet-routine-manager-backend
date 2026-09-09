@@ -41,6 +41,7 @@ model User {
   familyMembers      FamilyMember[]
   routines           Routine[]
   authorizationCodes AuthorizationCode[]
+  refreshTokens      RefreshToken[]
 
   @@unique([provider, providerId])
 }
@@ -54,6 +55,22 @@ model AuthorizationCode {
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid()) @db.Uuid
+  tokenHash         String    @unique
+  userId            String    @db.Uuid
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?   @unique @db.Uuid
+  createdAt         DateTime  @default(now())
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces   RefreshToken? @relation("RefreshTokenRotation")
+
+  @@index([userId])
 }
 
 model Family {
