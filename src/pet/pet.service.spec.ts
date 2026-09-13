@@ -160,6 +160,7 @@ describe('PetService', () => {
       const petWithoutOptionals = {
         ...createdPet,
         birthDate: null,
+        breed: null,
         image: null,
         registrationNumber: null,
       };
@@ -172,7 +173,6 @@ describe('PetService', () => {
           name: '초코',
           gender: 'FEMALE',
           species: 'DOG',
-          breed: '푸들',
         }),
       ).resolves.toEqual(petWithoutOptionals);
 
@@ -184,10 +184,104 @@ describe('PetService', () => {
           birthDate: null,
           gender: 'FEMALE',
           species: 'DOG',
-          breed: '푸들',
+          breed: null,
           image: null,
           registrationNumber: null,
         },
+      });
+    });
+
+    it('should store omitted breed as null when gender is valid', async () => {
+      const petWithoutBreed = {
+        ...createdPet,
+        breed: null,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      transactionClient.pet.create.mockResolvedValue(petWithoutBreed);
+
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          name: '초코',
+          gender: 'MALE',
+          species: 'DOG',
+        }),
+      ).resolves.toEqual(petWithoutBreed);
+
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
+        data: {
+          familyId: 'family-id',
+          name: '초코',
+          birthDate: null,
+          gender: 'MALE',
+          species: 'DOG',
+          breed: null,
+          image: null,
+          registrationNumber: null,
+        },
+      });
+    });
+
+    it('should store empty breed as null when gender is valid', async () => {
+      const petWithoutBreed = {
+        ...createdPet,
+        breed: null,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      transactionClient.pet.create.mockResolvedValue(petWithoutBreed);
+
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          name: '초코',
+          gender: 'MALE',
+          species: 'DOG',
+          breed: '',
+        }),
+      ).resolves.toEqual(petWithoutBreed);
+
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ breed: null }),
+      });
+    });
+
+    it('should store whitespace breed as null when gender is valid', async () => {
+      const petWithoutBreed = {
+        ...createdPet,
+        breed: null,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      transactionClient.pet.create.mockResolvedValue(petWithoutBreed);
+
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          name: '초코',
+          gender: 'MALE',
+          species: 'DOG',
+          breed: '   ',
+        }),
+      ).resolves.toEqual(petWithoutBreed);
+
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ breed: null }),
+      });
+    });
+
+    it('should trim a provided breed when gender is valid', async () => {
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findUnique.mockResolvedValue(null);
+      transactionClient.pet.create.mockResolvedValue(createdPet);
+
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          ...createPetDto,
+          breed: '  푸들  ',
+        }),
+      ).resolves.toEqual(createdPet);
+
+      expect(transactionClient.pet.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ breed: '푸들' }),
       });
     });
 
@@ -330,12 +424,25 @@ describe('PetService', () => {
       expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
     });
 
-    it('should reject empty breeds', async () => {
+    it('should reject omitted name', async () => {
       await expect(
         petService.createPet('user-id', 'family-id', {
-          ...createPetDto,
-          breed: '   ',
-        }),
+          gender: 'MALE',
+          species: 'DOG',
+          breed: '푸들',
+        } as typeof createPetDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should reject omitted gender', async () => {
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          name: '초코',
+          species: 'DOG',
+          breed: '푸들',
+        } as typeof createPetDto),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
@@ -347,6 +454,18 @@ describe('PetService', () => {
           ...createPetDto,
           gender: 'UNKNOWN' as 'MALE',
         }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should reject omitted species', async () => {
+      await expect(
+        petService.createPet('user-id', 'family-id', {
+          name: '초코',
+          gender: 'MALE',
+          breed: '푸들',
+        } as typeof createPetDto),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();

@@ -40,8 +40,13 @@ export class PetResponseDto {
   })
   species: PetSpecies;
 
-  @ApiProperty({ example: '푸들' })
-  breed: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '푸들',
+    description: '품종. 등록 시 생략하면 null',
+  })
+  breed: string | null;
 
   @ApiProperty({
     type: String,

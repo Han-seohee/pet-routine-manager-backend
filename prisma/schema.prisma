@@ -107,7 +107,7 @@ model Pet {
   birthDate          DateTime?
   gender             PetGender
   species            PetSpecies
-  breed              String
+  breed              String?
   image              String?
   registrationNumber String?   @unique
 

@@ -1933,6 +1933,205 @@ describe('AppController (e2e)', () => {
       .expect(400);
   });
 
+  it('/families/:familyId/pets (POST) creates a pet when breed is omitted', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/pets`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'MALE',
+        species: 'DOG',
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          id: 'new-pet-id',
+          familyId,
+          name: '초코',
+          gender: 'MALE',
+          species: 'DOG',
+          breed: null,
+        });
+      });
+  });
+
+  it('/families/:familyId/pets (POST) stores empty breed as null', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/pets`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'FEMALE',
+        species: 'CAT',
+        breed: '',
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.breed).toBeNull();
+      });
+  });
+
+  it('/families/:familyId/pets (POST) stores whitespace breed as null', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/pets`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'MALE',
+        species: 'DOG',
+        breed: '   ',
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.breed).toBeNull();
+      });
+  });
+
+  it('/families/:familyId/pets (POST) trims provided breed', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    return request(app.getHttpServer())
+      .post(`/families/${familyId}/pets`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'MALE',
+        species: 'DOG',
+        breed: '  푸들  ',
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.breed).toBe('푸들');
+      });
+  });
+
+  it('/families/:familyId/pets (POST) returns 400 when gender is omitted', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/pets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        species: 'DOG',
+        breed: '푸들',
+      })
+      .expect(400);
+  });
+
+  it('/families/:familyId/pets (POST) returns 400 for invalid gender', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/pets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'UNKNOWN',
+        species: 'DOG',
+        breed: '푸들',
+      })
+      .expect(400);
+  });
+
+  it('/families/:familyId/pets (POST) returns 400 when name is omitted', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/pets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        gender: 'MALE',
+        species: 'DOG',
+        breed: '푸들',
+      })
+      .expect(400);
+  });
+
+  it('/families/:familyId/pets (POST) returns 400 when species is omitted', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/pets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'MALE',
+        breed: '푸들',
+      })
+      .expect(400);
+  });
+
+  it('/families/:familyId/pets (POST) returns 400 for invalid species', async () => {
+    const jwtService = app.get(JwtService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+
+    return request(app.getHttpServer())
+      .post('/families/existing-family-id/pets')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: '초코',
+        gender: 'MALE',
+        species: 'BIRD',
+        breed: '푸들',
+      })
+      .expect(400);
+  });
+
   it('/families/:familyId/pets (GET) rejects requests without JWT', () => {
     return request(app.getHttpServer())
       .get('/families/existing-family-id/pets')

@@ -34,11 +34,13 @@ export class CreatePetDto {
   })
   species: PetSpecies;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    type: String,
     example: '푸들',
-    description: '품종. 공백만 있는 값은 허용되지 않습니다.',
+    description:
+      '품종. 생략하거나 빈 문자열이면 null로 저장됩니다. 값이 있으면 trim되어 저장됩니다.',
   })
-  breed: string;
+  breed?: string;
 
   @ApiPropertyOptional({
     type: String,

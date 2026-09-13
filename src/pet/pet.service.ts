@@ -47,12 +47,6 @@ export class PetService {
       throw new BadRequestException('name must be a non-empty string');
     }
 
-    const breed = dto.breed?.trim();
-
-    if (!breed) {
-      throw new BadRequestException('breed must be a non-empty string');
-    }
-
     if (!PET_GENDERS.has(dto.gender)) {
       throw new BadRequestException('gender must be MALE or FEMALE');
     }
@@ -62,6 +56,7 @@ export class PetService {
     }
 
     const birthDate = this.parseOptionalBirthDate(dto.birthDate);
+    const breed = this.parseOptionalString(dto.breed);
     const image = this.parseOptionalString(dto.image);
     const registrationNumber = this.parseOptionalString(dto.registrationNumber);
 
