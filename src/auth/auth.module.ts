@@ -17,7 +17,7 @@ import { KakaoStrategy } from './kakao.strategy';
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: '1d',
+          expiresIn: '30m',
         },
       }),
     }),
