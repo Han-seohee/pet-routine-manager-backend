@@ -838,14 +838,115 @@ describe('PetService', () => {
       expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
     });
 
-    it('should reject empty breeds', async () => {
+    it('should update breed when a value is provided', async () => {
+      const updatedPet = {
+        ...createdPet,
+        breed: '말티즈',
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findFirst.mockResolvedValue(createdPet);
+      prismaService.pet.update.mockResolvedValue(updatedPet);
+
+      await expect(
+        petService.updatePet('user-id', 'family-id', 'pet-id', {
+          breed: '말티즈',
+        }),
+      ).resolves.toEqual(updatedPet);
+
+      expect(prismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: 'pet-id' },
+        data: { breed: '말티즈' },
+      });
+    });
+
+    it('should trim breed on update', async () => {
+      const updatedPet = {
+        ...createdPet,
+        breed: '말티즈',
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findFirst.mockResolvedValue(createdPet);
+      prismaService.pet.update.mockResolvedValue(updatedPet);
+
+      await expect(
+        petService.updatePet('user-id', 'family-id', 'pet-id', {
+          breed: '  말티즈  ',
+        }),
+      ).resolves.toEqual(updatedPet);
+
+      expect(prismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: 'pet-id' },
+        data: { breed: '말티즈' },
+      });
+    });
+
+    it('should store empty breed as null on update', async () => {
+      const updatedPet = {
+        ...createdPet,
+        breed: null,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findFirst.mockResolvedValue(createdPet);
+      prismaService.pet.update.mockResolvedValue(updatedPet);
+
       await expect(
         petService.updatePet('user-id', 'family-id', 'pet-id', {
           breed: '',
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).resolves.toEqual(updatedPet);
 
-      expect(prismaService.familyMember.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: 'pet-id' },
+        data: { breed: null },
+      });
+    });
+
+    it('should store whitespace breed as null on update', async () => {
+      const updatedPet = {
+        ...createdPet,
+        breed: null,
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findFirst.mockResolvedValue(createdPet);
+      prismaService.pet.update.mockResolvedValue(updatedPet);
+
+      await expect(
+        petService.updatePet('user-id', 'family-id', 'pet-id', {
+          breed: '   ',
+        }),
+      ).resolves.toEqual(updatedPet);
+
+      expect(prismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: 'pet-id' },
+        data: { breed: null },
+      });
+    });
+
+    it('should keep existing breed when breed is omitted', async () => {
+      const updatedPet = {
+        ...createdPet,
+        name: '새 이름',
+      };
+
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.pet.findFirst.mockResolvedValue(createdPet);
+      prismaService.pet.update.mockResolvedValue(updatedPet);
+
+      await expect(
+        petService.updatePet('user-id', 'family-id', 'pet-id', {
+          name: '새 이름',
+        }),
+      ).resolves.toEqual(updatedPet);
+
+      expect(prismaService.pet.update).toHaveBeenCalledWith({
+        where: { id: 'pet-id' },
+        data: { name: '새 이름' },
+      });
+      expect(updatedPet.breed).toBe('푸들');
     });
 
     it('should throw ConflictException when registrationNumber already exists on another pet', async () => {

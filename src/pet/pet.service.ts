@@ -209,7 +209,7 @@ export class PetService {
     birthDate?: Date | null;
     gender?: Pet['gender'];
     species?: Pet['species'];
-    breed?: string;
+    breed?: string | null;
     image?: string | null;
     registrationNumber?: string | null;
   } {
@@ -230,7 +230,7 @@ export class PetService {
       birthDate?: Date | null;
       gender?: Pet['gender'];
       species?: Pet['species'];
-      breed?: string;
+      breed?: string | null;
       image?: string | null;
       registrationNumber?: string | null;
     } = {};
@@ -246,13 +246,7 @@ export class PetService {
     }
 
     if (dto.breed !== undefined) {
-      const breed = dto.breed.trim();
-
-      if (!breed) {
-        throw new BadRequestException('breed must be a non-empty string');
-      }
-
-      data.breed = breed;
+      data.breed = this.parseOptionalString(dto.breed);
     }
 
     if (dto.gender !== undefined) {

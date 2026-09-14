@@ -123,7 +123,7 @@ export class PetController {
   @ApiOperation({
     summary: '반려동물 수정',
     description:
-      'OWNER만 반려동물을 수정할 수 있습니다. 전달된 필드만 변경되며, 빈 본문은 허용되지 않습니다.',
+      'OWNER만 반려동물을 수정할 수 있습니다. 전달된 필드만 변경되며, 빈 본문은 허용되지 않습니다. breed를 생략하면 기존 값이 유지되고, 빈 문자열이나 공백만 보내면 null로 저장됩니다.',
   })
   @ApiParam({
     name: 'petId',
@@ -135,7 +135,7 @@ export class PetController {
   @ApiResponse({
     status: 400,
     description:
-      '수정할 필드가 없거나, name/breed가 비어 있거나, gender가 유효하지 않거나, birthDate가 유효한 날짜가 아닌 경우',
+      '수정할 필드가 없거나, name이 비어 있거나, gender가 유효하지 않거나, birthDate가 유효한 날짜가 아닌 경우',
   })
   @ApiResponse({ status: 403, description: 'OWNER가 아닙니다.' })
   @ApiResponse({

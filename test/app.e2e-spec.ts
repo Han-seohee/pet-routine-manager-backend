@@ -2713,15 +2713,142 @@ describe('AppController (e2e)', () => {
       .expect(400);
   });
 
-  it('/families/:familyId/pets/:petId (PATCH) returns 400 for empty breed', async () => {
+  it('/families/:familyId/pets/:petId (PATCH) stores empty breed as null', async () => {
     const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
     const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+    const pet = {
+      id: 'pet-id',
+      familyId,
+      name: '초코',
+      birthDate: new Date('2024-01-15T00:00:00.000Z'),
+      gender: 'MALE' as const,
+      breed: '푸들',
+      image: null,
+      registrationNumber: '123456789',
+    };
+    const updatedPet = {
+      ...pet,
+      breed: null,
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.pet, 'findFirst').mockResolvedValue(pet);
+    const emptyBreedUpdateSpy = jest
+      .spyOn(prismaService.pet, 'update')
+      .mockResolvedValue(updatedPet);
 
     return request(app.getHttpServer())
-      .patch('/families/existing-family-id/pets/pet-id')
+      .patch(`/families/${familyId}/pets/${pet.id}`)
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ breed: '' })
-      .expect(400);
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.breed).toBeNull();
+        expect(emptyBreedUpdateSpy).toHaveBeenCalledWith({
+          where: { id: pet.id },
+          data: { breed: null },
+        });
+      });
+  });
+
+  it('/families/:familyId/pets/:petId (PATCH) stores whitespace breed as null', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+    const pet = {
+      id: 'pet-id',
+      familyId,
+      name: '초코',
+      birthDate: new Date('2024-01-15T00:00:00.000Z'),
+      gender: 'MALE' as const,
+      breed: '푸들',
+      image: null,
+      registrationNumber: '123456789',
+    };
+    const updatedPet = {
+      ...pet,
+      breed: null,
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.pet, 'findFirst').mockResolvedValue(pet);
+    const whitespaceBreedUpdateSpy = jest
+      .spyOn(prismaService.pet, 'update')
+      .mockResolvedValue(updatedPet);
+
+    return request(app.getHttpServer())
+      .patch(`/families/${familyId}/pets/${pet.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ breed: '   ' })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.breed).toBeNull();
+        expect(whitespaceBreedUpdateSpy).toHaveBeenCalledWith({
+          where: { id: pet.id },
+          data: { breed: null },
+        });
+      });
+  });
+
+  it('/families/:familyId/pets/:petId (PATCH) trims breed', async () => {
+    const jwtService = app.get(JwtService);
+    const prismaService = app.get(PrismaService);
+    const accessToken = jwtService.sign({ sub: 'owner-user-id' });
+    const familyId = 'existing-family-id';
+    const pet = {
+      id: 'pet-id',
+      familyId,
+      name: '초코',
+      birthDate: new Date('2024-01-15T00:00:00.000Z'),
+      gender: 'MALE' as const,
+      breed: '푸들',
+      image: null,
+      registrationNumber: '123456789',
+    };
+    const updatedPet = {
+      ...pet,
+      breed: '말티즈',
+    };
+
+    jest.spyOn(prismaService.familyMember, 'findUnique').mockResolvedValue({
+      id: 'owner-member-id',
+      userId: 'owner-user-id',
+      familyId,
+      role: 'OWNER',
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    jest.spyOn(prismaService.pet, 'findFirst').mockResolvedValue(pet);
+    const updateSpy = jest
+      .spyOn(prismaService.pet, 'update')
+      .mockResolvedValue(updatedPet);
+
+    return request(app.getHttpServer())
+      .patch(`/families/${familyId}/pets/${pet.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ breed: ' 말티즈 ' })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.breed).toBe('말티즈');
+        expect(updateSpy).toHaveBeenCalledWith({
+          where: { id: pet.id },
+          data: { breed: '말티즈' },
+        });
+      });
   });
 
   it('/families/:familyId/pets/:petId (PATCH) returns 409 when registrationNumber already exists', async () => {
