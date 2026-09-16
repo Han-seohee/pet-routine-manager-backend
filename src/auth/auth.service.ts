@@ -141,9 +141,8 @@ export class AuthService {
     }
 
     const user = record.user;
-    const nextRefreshToken = randomBytes(REFRESH_TOKEN_BYTES).toString(
-      'base64url',
-    );
+    const nextRefreshToken =
+      randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
     const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {

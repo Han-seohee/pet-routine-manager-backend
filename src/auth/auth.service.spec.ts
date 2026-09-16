@@ -504,9 +504,7 @@ describe('AuthService', () => {
       await authService.refreshAccessToken(refreshToken);
 
       const revoked = (
-        tx.refreshToken.updateMany.mock.calls[0] as [
-          { where: { id: string } },
-        ]
+        tx.refreshToken.updateMany.mock.calls[0] as [{ where: { id: string } }]
       )[0];
 
       expect(revoked.where.id).toBe(storedRefreshToken.id);
@@ -611,9 +609,7 @@ describe('AuthService', () => {
         refreshToken: {
           create: jest.fn(),
           findUnique: jest.fn(
-            (args: {
-              where: { id?: string; replacedByTokenId?: string };
-            }) => {
+            (args: { where: { id?: string; replacedByTokenId?: string } }) => {
               if (args.where.id) {
                 return Promise.resolve(
                   tokens.find((token) => token.id === args.where.id) ?? null,
@@ -656,9 +652,9 @@ describe('AuthService', () => {
           revokedAt: expect.any(Date),
         },
       });
-      expect(JSON.stringify(tx.refreshToken.updateMany.mock.calls)).not.toContain(
-        refreshToken,
-      );
+      expect(
+        JSON.stringify(tx.refreshToken.updateMany.mock.calls),
+      ).not.toContain(refreshToken);
     });
 
     it('should revoke the latest token when a middle chain token is reused', async () => {
@@ -692,9 +688,7 @@ describe('AuthService', () => {
         refreshToken: {
           create: jest.fn(),
           findUnique: jest.fn(
-            (args: {
-              where: { id?: string; replacedByTokenId?: string };
-            }) => {
+            (args: { where: { id?: string; replacedByTokenId?: string } }) => {
               if (args.where.id) {
                 return Promise.resolve(
                   tokens.find((token) => token.id === args.where.id) ?? null,
@@ -767,9 +761,7 @@ describe('AuthService', () => {
         refreshToken: {
           create: jest.fn(),
           findUnique: jest.fn(
-            (args: {
-              where: { id?: string; replacedByTokenId?: string };
-            }) => {
+            (args: { where: { id?: string; replacedByTokenId?: string } }) => {
               if (args.where.id) {
                 return Promise.resolve(
                   tokens.find((token) => token.id === args.where.id) ?? null,
@@ -867,7 +859,8 @@ describe('AuthService', () => {
 
       await authService.logout(refreshToken);
 
-      const revoked = prismaService.refreshToken.updateMany.mock.calls[0][0] as {
+      const revoked = prismaService.refreshToken.updateMany.mock
+        .calls[0][0] as {
         where: { tokenHash: string; revokedAt: null };
       };
 
@@ -898,11 +891,11 @@ describe('AuthService', () => {
     it('should succeed for an unknown refresh token without creating rows', async () => {
       prismaService.refreshToken.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(authService.logout('invalid-refresh-token')).resolves.toEqual(
-        {
-          ok: true,
-        },
-      );
+      await expect(
+        authService.logout('invalid-refresh-token'),
+      ).resolves.toEqual({
+        ok: true,
+      });
       expect(prismaService.refreshToken.create).not.toHaveBeenCalled();
       expect(prismaService.refreshToken.delete).not.toHaveBeenCalled();
     });
