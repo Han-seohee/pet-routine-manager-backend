@@ -22,8 +22,11 @@ describe('RoutineController', () => {
     userId: 'user-id',
     categoryId: 'category-id',
     subCategoryId: 'sub-category-id',
-    recordedAt: new Date('2026-09-07T08:00:00.000Z'),
+    recordedAt: new Date('2026-09-16T04:10:00.000Z'),
     memo: '아침 사료를 잘 먹음',
+    user: { displayName: '나' },
+    category: { name: '밥' },
+    subCategory: { name: '사료' },
   };
 
   beforeEach(async () => {
@@ -54,6 +57,7 @@ describe('RoutineController', () => {
       const dto = {
         categoryId: 'category-id',
         subCategoryId: 'sub-category-id',
+        recordedAt: '2026-09-16T04:10:00.000Z',
         memo: '아침 사료를 잘 먹음',
       };
 
@@ -91,6 +95,27 @@ describe('RoutineController', () => {
       expect(routineService.findRoutines).toHaveBeenCalledWith(
         'user-id',
         'pet-id',
+        undefined,
+      );
+    });
+
+    it('should pass date query to RoutineService', async () => {
+      routineService.findRoutines.mockResolvedValue([createdRoutine]);
+
+      await expect(
+        routineController.findRoutines(
+          { user: { userId: 'user-id' } } as Parameters<
+            RoutineController['findRoutines']
+          >[0],
+          'pet-id',
+          '2026-09-16',
+        ),
+      ).resolves.toEqual([createdRoutine]);
+
+      expect(routineService.findRoutines).toHaveBeenCalledWith(
+        'user-id',
+        'pet-id',
+        '2026-09-16',
       );
     });
   });
@@ -121,10 +146,14 @@ describe('RoutineController', () => {
     it('should pass authenticated userId, petId, routineId, and dto to RoutineService', async () => {
       const updatedRoutine = {
         ...createdRoutine,
+        recordedAt: new Date('2026-09-16T08:00:00.000Z'),
         memo: '저녁에도 사료를 먹음',
       };
       routineService.updateRoutine.mockResolvedValue(updatedRoutine);
-      const dto = { memo: '저녁에도 사료를 먹음' };
+      const dto = {
+        recordedAt: '2026-09-16T08:00:00.000Z',
+        memo: '저녁에도 사료를 먹음',
+      };
 
       await expect(
         routineController.updateRoutine(

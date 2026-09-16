@@ -43,6 +43,10 @@ describe('RoutineService', () => {
     role: 'OWNER' as const,
     joinedAt,
   };
+  const memberMembership = {
+    ...ownerMembership,
+    role: 'MEMBER' as const,
+  };
   const pet = {
     id: 'pet-id',
     familyId: family.id,
@@ -68,7 +72,13 @@ describe('RoutineService', () => {
     categoryId: category.id,
     name: '사료',
   };
-  const recordedAt = new Date('2026-09-07T08:00:00.000Z');
+  const recordedAt = new Date('2026-09-16T04:10:00.000Z');
+  const recordedAtIso = '2026-09-16T04:10:00.000Z';
+  const routineInclude = {
+    user: { select: { displayName: true } },
+    category: { select: { name: true } },
+    subCategory: { select: { name: true } },
+  };
   const createdRoutine = {
     id: 'routine-id',
     petId: pet.id,
@@ -77,6 +87,9 @@ describe('RoutineService', () => {
     subCategoryId: subCategory.id,
     recordedAt,
     memo: '아침 사료를 잘 먹음',
+    user: { displayName: '나' },
+    category: { name: '밥' },
+    subCategory: { name: '사료' },
   };
 
   beforeEach(async () => {
@@ -120,12 +133,14 @@ describe('RoutineService', () => {
   });
 
   describe('createRoutine', () => {
-    it('should create a routine with category only', async () => {
+    it('should create a routine with category only and the provided recordedAt', async () => {
       const walkRoutine = {
         ...createdRoutine,
         categoryId: walkCategory.id,
         subCategoryId: null,
         memo: null,
+        category: { name: '산책' },
+        subCategory: null,
       };
 
       prismaService.pet.findUnique.mockResolvedValue(pet);
@@ -136,6 +151,7 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'walk-category-id',
+          recordedAt: recordedAtIso,
         }),
       ).resolves.toEqual(walkRoutine);
 
@@ -152,8 +168,10 @@ describe('RoutineService', () => {
           userId: 'user-id',
           categoryId: 'walk-category-id',
           subCategoryId: null,
+          recordedAt,
           memo: null,
         },
+        include: routineInclude,
       });
     });
 
@@ -168,6 +186,7 @@ describe('RoutineService', () => {
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'category-id',
           subCategoryId: 'sub-category-id',
+          recordedAt: recordedAtIso,
           memo: '아침 사료를 잘 먹음',
         }),
       ).resolves.toEqual(createdRoutine);
@@ -184,35 +203,48 @@ describe('RoutineService', () => {
           userId: 'user-id',
           categoryId: 'category-id',
           subCategoryId: 'sub-category-id',
+          recordedAt,
           memo: '아침 사료를 잘 먹음',
         },
+        include: routineInclude,
       });
     });
 
-    it('should create a routine when user is MEMBER', async () => {
+    it('should create a routine with recordedAt when user is MEMBER', async () => {
       prismaService.pet.findUnique.mockResolvedValue(pet);
-      prismaService.familyMember.findUnique.mockResolvedValue({
-        ...ownerMembership,
-        role: 'MEMBER',
-      });
+      prismaService.familyMember.findUnique.mockResolvedValue(memberMembership);
       prismaService.category.findFirst.mockResolvedValue(walkCategory);
       prismaService.routine.create.mockResolvedValue({
         ...createdRoutine,
         categoryId: walkCategory.id,
         subCategoryId: null,
         memo: null,
+        category: { name: '산책' },
+        subCategory: null,
       });
 
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'walk-category-id',
+          recordedAt: recordedAtIso,
         }),
       ).resolves.toMatchObject({
         petId: 'pet-id',
         userId: 'user-id',
+        recordedAt,
       });
 
-      expect(prismaService.routine.create).toHaveBeenCalled();
+      expect(prismaService.routine.create).toHaveBeenCalledWith({
+        data: {
+          petId: 'pet-id',
+          userId: 'user-id',
+          categoryId: 'walk-category-id',
+          subCategoryId: null,
+          recordedAt,
+          memo: null,
+        },
+        include: routineInclude,
+      });
     });
 
     it('should throw ForbiddenException when pet belongs to another family', async () => {
@@ -229,6 +261,7 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'category-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
@@ -251,6 +284,7 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'other-pet-category-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -273,6 +307,7 @@ describe('RoutineService', () => {
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'category-id',
           subCategoryId: 'other-category-sub-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -291,6 +326,7 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'missing-pet-id', {
           categoryId: 'category-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -306,6 +342,7 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'missing-category-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -322,6 +359,7 @@ describe('RoutineService', () => {
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: 'category-id',
           subCategoryId: 'missing-sub-category-id',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -332,13 +370,37 @@ describe('RoutineService', () => {
       await expect(
         routineService.createRoutine('user-id', 'pet-id', {
           categoryId: '   ',
+          recordedAt: recordedAtIso,
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
     });
 
-    it('should ignore client-provided userId and recordedAt by not persisting them from the dto', async () => {
+    it('should reject missing recordedAt', async () => {
+      await expect(
+        routineService.createRoutine('user-id', 'pet-id', {
+          categoryId: 'walk-category-id',
+        } as never),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.routine.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid recordedAt', async () => {
+      await expect(
+        routineService.createRoutine('user-id', 'pet-id', {
+          categoryId: 'walk-category-id',
+          recordedAt: 'not-a-date',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.routine.create).not.toHaveBeenCalled();
+    });
+
+    it('should persist client-provided recordedAt and JWT userId instead of body userId', async () => {
       prismaService.pet.findUnique.mockResolvedValue(pet);
       prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
       prismaService.category.findFirst.mockResolvedValue(walkCategory);
@@ -347,10 +409,13 @@ describe('RoutineService', () => {
         categoryId: walkCategory.id,
         subCategoryId: null,
         memo: null,
+        category: { name: '산책' },
+        subCategory: null,
       });
 
       await routineService.createRoutine('user-id', 'pet-id', {
         categoryId: 'walk-category-id',
+        recordedAt: recordedAtIso,
       });
 
       expect(prismaService.routine.create).toHaveBeenCalledWith({
@@ -359,18 +424,20 @@ describe('RoutineService', () => {
           userId: 'user-id',
           categoryId: 'walk-category-id',
           subCategoryId: null,
+          recordedAt,
           memo: null,
         },
+        include: routineInclude,
       });
     });
   });
 
   describe('findRoutines', () => {
-    it('should return routines ordered by recordedAt desc', async () => {
+    it('should return all routines ordered by recordedAt desc when date is omitted', async () => {
       const olderRoutine = {
         ...createdRoutine,
         id: 'older-routine-id',
-        recordedAt: new Date('2026-09-06T08:00:00.000Z'),
+        recordedAt: new Date('2026-09-15T08:00:00.000Z'),
       };
 
       prismaService.pet.findUnique.mockResolvedValue(pet);
@@ -387,7 +454,72 @@ describe('RoutineService', () => {
       expect(prismaService.routine.findMany).toHaveBeenCalledWith({
         where: { petId: 'pet-id' },
         orderBy: { recordedAt: 'desc' },
+        include: routineInclude,
       });
+    });
+
+    it('should return routines for the KST date ordered by recordedAt desc', async () => {
+      const morningRoutine = {
+        ...createdRoutine,
+        id: 'morning-routine-id',
+        recordedAt: new Date('2026-09-16T00:10:00.000Z'),
+      };
+
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.routine.findMany.mockResolvedValue([
+        morningRoutine,
+        createdRoutine,
+      ]);
+
+      await expect(
+        routineService.findRoutines('user-id', 'pet-id', '2026-09-16'),
+      ).resolves.toEqual([morningRoutine, createdRoutine]);
+
+      expect(prismaService.routine.findMany).toHaveBeenCalledWith({
+        where: {
+          petId: 'pet-id',
+          recordedAt: {
+            gte: new Date('2026-09-15T15:00:00.000Z'),
+            lt: new Date('2026-09-16T15:00:00.000Z'),
+          },
+        },
+        orderBy: { recordedAt: 'desc' },
+        include: routineInclude,
+      });
+    });
+
+    it('should split dates at KST midnight, not UTC midnight', async () => {
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.routine.findMany.mockResolvedValue([]);
+
+      await routineService.findRoutines('user-id', 'pet-id', '2026-09-16');
+
+      expect(prismaService.routine.findMany).toHaveBeenCalledWith({
+        where: {
+          petId: 'pet-id',
+          recordedAt: {
+            gte: new Date('2026-09-15T15:00:00.000Z'),
+            lt: new Date('2026-09-16T15:00:00.000Z'),
+          },
+        },
+        orderBy: { recordedAt: 'desc' },
+        include: routineInclude,
+      });
+    });
+
+    it('should reject invalid date query values', async () => {
+      await expect(
+        routineService.findRoutines('user-id', 'pet-id', '2026/09/16'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      await expect(
+        routineService.findRoutines('user-id', 'pet-id', '2026-13-40'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.routine.findMany).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when user is not a member', async () => {
@@ -428,7 +560,26 @@ describe('RoutineService', () => {
           id: 'routine-id',
           petId: 'pet-id',
         },
+        include: routineInclude,
       });
+    });
+
+    it('should return null subCategory when the related subCategory is missing', async () => {
+      const routineWithoutSubCategory = {
+        ...createdRoutine,
+        subCategoryId: null,
+        subCategory: null,
+      };
+
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.routine.findFirst.mockResolvedValue(
+        routineWithoutSubCategory,
+      );
+
+      await expect(
+        routineService.findRoutineById('user-id', 'pet-id', 'routine-id'),
+      ).resolves.toEqual(routineWithoutSubCategory);
     });
 
     it('should throw NotFoundException when routine belongs to another pet', async () => {
@@ -449,6 +600,7 @@ describe('RoutineService', () => {
           id: 'other-pet-routine-id',
           petId: 'pet-id',
         },
+        include: routineInclude,
       });
     });
 
@@ -468,7 +620,7 @@ describe('RoutineService', () => {
   });
 
   describe('updateRoutine', () => {
-    it('should update memo', async () => {
+    it('should update memo only', async () => {
       const updatedRoutine = {
         ...createdRoutine,
         memo: '저녁에도 사료를 먹음',
@@ -488,7 +640,97 @@ describe('RoutineService', () => {
       expect(prismaService.routine.update).toHaveBeenCalledWith({
         where: { id: 'routine-id' },
         data: { memo: '저녁에도 사료를 먹음' },
+        include: routineInclude,
       });
+    });
+
+    it('should update recordedAt only', async () => {
+      const nextRecordedAt = new Date('2026-09-16T08:00:00.000Z');
+      const updatedRoutine = {
+        ...createdRoutine,
+        recordedAt: nextRecordedAt,
+      };
+
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.routine.findFirst.mockResolvedValue(createdRoutine);
+      prismaService.routine.update.mockResolvedValue(updatedRoutine);
+
+      await expect(
+        routineService.updateRoutine('user-id', 'pet-id', 'routine-id', {
+          recordedAt: '2026-09-16T08:00:00.000Z',
+        }),
+      ).resolves.toEqual(updatedRoutine);
+
+      expect(prismaService.routine.update).toHaveBeenCalledWith({
+        where: { id: 'routine-id' },
+        data: { recordedAt: nextRecordedAt },
+        include: routineInclude,
+      });
+    });
+
+    it('should update recordedAt and memo together', async () => {
+      const nextRecordedAt = new Date('2026-09-16T08:00:00.000Z');
+      const updatedRoutine = {
+        ...createdRoutine,
+        recordedAt: nextRecordedAt,
+        memo: '저녁 사료를 잘 먹음',
+      };
+
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(ownerMembership);
+      prismaService.routine.findFirst.mockResolvedValue(createdRoutine);
+      prismaService.routine.update.mockResolvedValue(updatedRoutine);
+
+      await expect(
+        routineService.updateRoutine('user-id', 'pet-id', 'routine-id', {
+          recordedAt: '2026-09-16T08:00:00.000Z',
+          memo: '저녁 사료를 잘 먹음',
+        }),
+      ).resolves.toEqual(updatedRoutine);
+
+      expect(prismaService.routine.update).toHaveBeenCalledWith({
+        where: { id: 'routine-id' },
+        data: {
+          recordedAt: nextRecordedAt,
+          memo: '저녁 사료를 잘 먹음',
+        },
+        include: routineInclude,
+      });
+    });
+
+    it('should update a routine when user is MEMBER', async () => {
+      const updatedRoutine = {
+        ...createdRoutine,
+        memo: 'MEMBER가 수정함',
+      };
+
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(memberMembership);
+      prismaService.routine.findFirst.mockResolvedValue(createdRoutine);
+      prismaService.routine.update.mockResolvedValue(updatedRoutine);
+
+      await expect(
+        routineService.updateRoutine('user-id', 'pet-id', 'routine-id', {
+          memo: 'MEMBER가 수정함',
+        }),
+      ).resolves.toEqual(updatedRoutine);
+
+      expect(prismaService.routine.update).toHaveBeenCalled();
+    });
+
+    it('should throw ForbiddenException when a non-member updates a routine', async () => {
+      prismaService.pet.findUnique.mockResolvedValue(pet);
+      prismaService.familyMember.findUnique.mockResolvedValue(null);
+      prismaService.family.findUnique.mockResolvedValue(family);
+
+      await expect(
+        routineService.updateRoutine('other-user-id', 'pet-id', 'routine-id', {
+          memo: '변경',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(prismaService.routine.update).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when updating a routine that belongs to another pet', async () => {
@@ -514,6 +756,17 @@ describe('RoutineService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid recordedAt', async () => {
+      await expect(
+        routineService.updateRoutine('user-id', 'pet-id', 'routine-id', {
+          recordedAt: 'not-a-date',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prismaService.pet.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.routine.update).not.toHaveBeenCalled();
     });
   });
 

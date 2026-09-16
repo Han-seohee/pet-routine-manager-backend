@@ -18,6 +18,15 @@ export class CreateRoutineDto {
   })
   subCategoryId?: string | null;
 
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    example: '2026-09-16T04:10:00.000Z',
+    description:
+      '실제로 펫을 케어한 수행 시각. ISO 8601 datetime. 서버가 now()로 덮어쓰지 않습니다.',
+  })
+  recordedAt: string;
+
   @ApiPropertyOptional({
     type: String,
     nullable: true,

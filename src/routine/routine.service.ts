@@ -9,6 +9,30 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { CreateRoutineDto } from './dto/create-routine.dto';
 import type { UpdateRoutineDto } from './dto/update-routine.dto';
 
+const ROUTINE_INCLUDE = {
+  user: {
+    select: {
+      displayName: true,
+    },
+  },
+  category: {
+    select: {
+      name: true,
+    },
+  },
+  subCategory: {
+    select: {
+      name: true,
+    },
+  },
+} as const;
+
+type RoutineWithRelations = Routine & {
+  user: { displayName: string | null };
+  category: { name: string };
+  subCategory: { name: string } | null;
+};
+
 export type RoutineResult = Pick<
   Routine,
   | 'id'
@@ -18,7 +42,14 @@ export type RoutineResult = Pick<
   | 'subCategoryId'
   | 'recordedAt'
   | 'memo'
->;
+> & {
+  user: { displayName: string | null };
+  category: { name: string };
+  subCategory: { name: string } | null;
+};
+
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 @Injectable()
 export class RoutineService {
@@ -38,6 +69,7 @@ export class RoutineService {
       throw new BadRequestException('categoryId must be a non-empty string');
     }
 
+    const recordedAt = this.parseRequiredRecordedAt(dto.recordedAt);
     const subCategoryId = this.parseOptionalId(dto.subCategoryId);
     const memo = this.parseOptionalMemo(dto.memo);
 
@@ -54,19 +86,31 @@ export class RoutineService {
         userId,
         categoryId,
         subCategoryId,
+        recordedAt,
         memo,
       },
+      include: ROUTINE_INCLUDE,
     });
 
     return this.toRoutineResult(routine);
   }
 
-  async findRoutines(userId: string, petId: string): Promise<RoutineResult[]> {
+  async findRoutines(
+    userId: string,
+    petId: string,
+    date?: string,
+  ): Promise<RoutineResult[]> {
+    const recordedAtFilter = this.parseOptionalKstDateFilter(date);
+
     await this.assertPetFamilyMember(userId, petId);
 
     const routines = await this.prisma.routine.findMany({
-      where: { petId },
+      where: {
+        petId,
+        ...(recordedAtFilter ? { recordedAt: recordedAtFilter } : {}),
+      },
       orderBy: { recordedAt: 'desc' },
+      include: ROUTINE_INCLUDE,
     });
 
     return routines.map((routine) => this.toRoutineResult(routine));
@@ -90,18 +134,27 @@ export class RoutineService {
     routineId: string,
     dto: UpdateRoutineDto,
   ): Promise<RoutineResult> {
-    if (dto.memo === undefined) {
+    if (dto.recordedAt === undefined && dto.memo === undefined) {
       throw new BadRequestException('at least one field must be provided');
     }
 
-    const memo = this.parseOptionalMemo(dto.memo);
+    const data: { recordedAt?: Date; memo?: string | null } = {};
+
+    if (dto.recordedAt !== undefined) {
+      data.recordedAt = this.parseRequiredRecordedAt(dto.recordedAt);
+    }
+
+    if (dto.memo !== undefined) {
+      data.memo = this.parseOptionalMemo(dto.memo);
+    }
 
     await this.assertPetFamilyMember(userId, petId);
     const routine = await this.findRoutineForPet(routineId, petId);
 
     const updatedRoutine = await this.prisma.routine.update({
       where: { id: routine.id },
-      data: { memo },
+      data,
+      include: ROUTINE_INCLUDE,
     });
 
     return this.toRoutineResult(updatedRoutine);
@@ -172,12 +225,13 @@ export class RoutineService {
   private async findRoutineForPet(
     routineId: string,
     petId: string,
-  ): Promise<Routine> {
+  ): Promise<RoutineWithRelations> {
     const routine = await this.prisma.routine.findFirst({
       where: {
         id: routineId,
         petId,
       },
+      include: ROUTINE_INCLUDE,
     });
 
     if (!routine) {
@@ -187,7 +241,7 @@ export class RoutineService {
     return routine;
   }
 
-  private toRoutineResult(routine: Routine): RoutineResult {
+  private toRoutineResult(routine: RoutineWithRelations): RoutineResult {
     return {
       id: routine.id,
       petId: routine.petId,
@@ -196,6 +250,15 @@ export class RoutineService {
       subCategoryId: routine.subCategoryId,
       recordedAt: routine.recordedAt,
       memo: routine.memo,
+      user: {
+        displayName: routine.user.displayName,
+      },
+      category: {
+        name: routine.category.name,
+      },
+      subCategory: routine.subCategory
+        ? { name: routine.subCategory.name }
+        : null,
     };
   }
 
@@ -215,5 +278,58 @@ export class RoutineService {
 
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
+  }
+
+  private parseRequiredRecordedAt(value: string | null | undefined): Date {
+    if (value == null) {
+      throw new BadRequestException('recordedAt must be a valid date');
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      throw new BadRequestException('recordedAt must be a valid date');
+    }
+
+    const parsed = new Date(trimmed);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('recordedAt must be a valid date');
+    }
+
+    return parsed;
+  }
+
+  private parseOptionalKstDateFilter(
+    value: string | undefined,
+  ): { gte: Date; lt: Date } | undefined {
+    if (value == null) {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    const match = DATE_ONLY_PATTERN.exec(trimmed);
+
+    if (!match) {
+      throw new BadRequestException('date must be in YYYY-MM-DD format');
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utcMidnight = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      utcMidnight.getUTCFullYear() !== year ||
+      utcMidnight.getUTCMonth() !== month - 1 ||
+      utcMidnight.getUTCDate() !== day
+    ) {
+      throw new BadRequestException('date must be in YYYY-MM-DD format');
+    }
+
+    return {
+      gte: new Date(utcMidnight.getTime() - KST_OFFSET_MS),
+      lt: new Date(Date.UTC(year, month - 1, day + 1) - KST_OFFSET_MS),
+    };
   }
 }

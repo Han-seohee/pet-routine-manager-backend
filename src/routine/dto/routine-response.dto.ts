@@ -1,5 +1,25 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+export class RoutineUserSummaryDto {
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '나',
+    description: '작성자의 화면 표시 이름',
+  })
+  displayName: string | null;
+}
+
+export class RoutineCategorySummaryDto {
+  @ApiProperty({ example: '밥' })
+  name: string;
+}
+
+export class RoutineSubCategorySummaryDto {
+  @ApiProperty({ example: '사료' })
+  name: string;
+}
+
 export class RoutineResponseDto {
   @ApiProperty({
     format: 'uuid',
@@ -30,15 +50,15 @@ export class RoutineResponseDto {
     format: 'uuid',
     nullable: true,
     example: '55555555-5555-5555-5555-555555555555',
-    description: 'SubCategory ID. Category만으로 기록한 경우 null',
+    description: 'SubCategory ID. Category만으로 기록했거나 삭제된 경우 null',
   })
   subCategoryId: string | null;
 
   @ApiProperty({
     type: String,
     format: 'date-time',
-    example: '2026-09-07T08:00:00.000Z',
-    description: '기록이 생성된 시간. 서버에서 자동 생성됩니다.',
+    example: '2026-09-16T04:10:00.000Z',
+    description: '실제로 펫을 케어한 수행 시각',
   })
   recordedAt: Date;
 
@@ -49,4 +69,18 @@ export class RoutineResponseDto {
     description: '선택 메모',
   })
   memo: string | null;
+
+  @ApiProperty({ type: RoutineUserSummaryDto })
+  user: RoutineUserSummaryDto;
+
+  @ApiProperty({ type: RoutineCategorySummaryDto })
+  category: RoutineCategorySummaryDto;
+
+  @ApiProperty({
+    type: RoutineSubCategorySummaryDto,
+    nullable: true,
+    description:
+      'SubCategory 정보. Category만으로 기록했거나 SubCategory가 삭제된 경우 null',
+  })
+  subCategory: RoutineSubCategorySummaryDto | null;
 }

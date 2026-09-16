@@ -19,126 +19,126 @@ jest.mock('../src/prisma/prisma.service', () => ({
     };
 
     return {
-    onModuleInit: jest.fn().mockResolvedValue(undefined),
-    onModuleDestroy: jest.fn().mockResolvedValue(undefined),
-    pingDatabase: jest.fn().mockResolvedValue(undefined),
-    user: {
-      findUnique: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation((args) =>
-        Promise.resolve({
-          id: 'new-user-id',
-          ...args.data,
-          createdAt: new Date('2026-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-        }),
-      ),
-    },
-    authorizationCode: {
-      create: jest.fn(),
-      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-      findUnique: jest.fn().mockResolvedValue(null),
-    },
-    refreshToken,
-    $transaction: jest.fn().mockImplementation(async (callback) => {
-      const tx = {
-        family: {
-          create: jest.fn().mockImplementation((args) =>
-            Promise.resolve({
-              id: 'new-family-id',
-              ...args.data,
-              createdAt: new Date('2026-01-01T00:00:00.000Z'),
-              updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-            }),
-          ),
-        },
-        familyMember: {
-          create: jest.fn().mockImplementation((args) =>
-            Promise.resolve({
-              id: 'new-member-id',
-              ...args.data,
-              joinedAt: new Date('2026-01-01T00:00:00.000Z'),
-            }),
-          ),
-          findMany: jest.fn().mockResolvedValue([]),
-        },
-        pet: {
-          create: jest.fn().mockImplementation((args) =>
-            Promise.resolve({
-              id: 'new-pet-id',
-              ...args.data,
-            }),
-          ),
-        },
-        category: {
-          create: jest.fn().mockImplementation((args) =>
-            Promise.resolve({
-              id: `new-category-${args.data.name}`,
-              ...args.data,
-            }),
-          ),
-        },
-        subCategory: {
-          create: jest.fn().mockImplementation((args) =>
-            Promise.resolve({
-              id: `new-sub-${args.data.name}`,
-              ...args.data,
-            }),
-          ),
-        },
-        refreshToken,
-      };
+      onModuleInit: jest.fn().mockResolvedValue(undefined),
+      onModuleDestroy: jest.fn().mockResolvedValue(undefined),
+      pingDatabase: jest.fn().mockResolvedValue(undefined),
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: 'new-user-id',
+            ...args.data,
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+          }),
+        ),
+      },
+      authorizationCode: {
+        create: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      refreshToken,
+      $transaction: jest.fn().mockImplementation(async (callback) => {
+        const tx = {
+          family: {
+            create: jest.fn().mockImplementation((args) =>
+              Promise.resolve({
+                id: 'new-family-id',
+                ...args.data,
+                createdAt: new Date('2026-01-01T00:00:00.000Z'),
+                updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+              }),
+            ),
+          },
+          familyMember: {
+            create: jest.fn().mockImplementation((args) =>
+              Promise.resolve({
+                id: 'new-member-id',
+                ...args.data,
+                joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+              }),
+            ),
+            findMany: jest.fn().mockResolvedValue([]),
+          },
+          pet: {
+            create: jest.fn().mockImplementation((args) =>
+              Promise.resolve({
+                id: 'new-pet-id',
+                ...args.data,
+              }),
+            ),
+          },
+          category: {
+            create: jest.fn().mockImplementation((args) =>
+              Promise.resolve({
+                id: `new-category-${args.data.name}`,
+                ...args.data,
+              }),
+            ),
+          },
+          subCategory: {
+            create: jest.fn().mockImplementation((args) =>
+              Promise.resolve({
+                id: `new-sub-${args.data.name}`,
+                ...args.data,
+              }),
+            ),
+          },
+          refreshToken,
+        };
 
-      return callback(tx);
-    }),
-    familyMember: {
-      findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn().mockResolvedValue(null),
-      create: jest.fn().mockImplementation((args) =>
-        Promise.resolve({
-          id: 'new-added-member-id',
-          ...args.data,
-          joinedAt: new Date('2026-01-01T00:00:00.000Z'),
-        }),
-      ),
-    },
-    family: {
-      findUnique: jest.fn().mockResolvedValue(null),
-      update: jest.fn().mockImplementation((args) =>
-        Promise.resolve({
-          id: args.where.id,
-          name: args.data.name,
-          createdAt: new Date('2026-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2026-01-03T00:00:00.000Z'),
-        }),
-      ),
-      delete: jest.fn().mockResolvedValue(undefined),
-    },
-    pet: {
-      findUnique: jest.fn().mockResolvedValue(null),
-      findFirst: jest.fn().mockResolvedValue(null),
-      findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn().mockImplementation((args) =>
-        Promise.resolve({
-          id: 'new-pet-id',
-          ...args.data,
-        }),
-      ),
-      update: jest.fn().mockImplementation((args) =>
-        Promise.resolve({
-          id: args.where.id,
-          familyId: 'existing-family-id',
-          name: '초코',
-          birthDate: new Date('2024-01-15T00:00:00.000Z'),
-          gender: 'MALE',
-          breed: '푸들',
-          image: null,
-          registrationNumber: '123456789',
-          ...args.data,
-        }),
-      ),
-      delete: jest.fn().mockResolvedValue(undefined),
-    },
-  };
+        return callback(tx);
+      }),
+      familyMember: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: 'new-added-member-id',
+            ...args.data,
+            joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+          }),
+        ),
+      },
+      family: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: args.where.id,
+            name: args.data.name,
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-01-03T00:00:00.000Z'),
+          }),
+        ),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
+      pet: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: 'new-pet-id',
+            ...args.data,
+          }),
+        ),
+        update: jest.fn().mockImplementation((args) =>
+          Promise.resolve({
+            id: args.where.id,
+            familyId: 'existing-family-id',
+            name: '초코',
+            birthDate: new Date('2024-01-15T00:00:00.000Z'),
+            gender: 'MALE',
+            breed: '푸들',
+            image: null,
+            registrationNumber: '123456789',
+            ...args.data,
+          }),
+        ),
+        delete: jest.fn().mockResolvedValue(undefined),
+      },
+    };
   }),
 }));
 
@@ -199,7 +199,11 @@ describe('AppController (e2e)', () => {
   ) => {
     jest.spyOn(prismaService.refreshToken, 'findUnique').mockImplementation(
       (args: {
-        where?: { tokenHash?: string; id?: string; replacedByTokenId?: string };
+        where?: {
+          tokenHash?: string;
+          id?: string;
+          replacedByTokenId?: string;
+        };
       }) => {
         const where = args.where ?? {};
 
@@ -306,8 +310,9 @@ describe('AppController (e2e)', () => {
     jest
       .spyOn(prismaService.authorizationCode, 'updateMany')
       .mockResolvedValue({ count: 1 });
-    jest.spyOn(prismaService.authorizationCode, 'findUnique').mockResolvedValue(
-      {
+    jest
+      .spyOn(prismaService.authorizationCode, 'findUnique')
+      .mockResolvedValue({
         id: 'authorization-code-id',
         codeHash: 'hashed-code',
         userId: user.id,
@@ -315,8 +320,7 @@ describe('AppController (e2e)', () => {
         usedAt: new Date('2026-01-01T00:00:00.000Z'),
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         user,
-      },
-    );
+      });
     const refreshTokenCreate = jest
       .spyOn(prismaService.refreshToken, 'create')
       .mockResolvedValue({
@@ -400,8 +404,9 @@ describe('AppController (e2e)', () => {
     jest
       .spyOn(prismaService.authorizationCode, 'updateMany')
       .mockResolvedValue({ count: 1 });
-    jest.spyOn(prismaService.authorizationCode, 'findUnique').mockResolvedValue(
-      {
+    jest
+      .spyOn(prismaService.authorizationCode, 'findUnique')
+      .mockResolvedValue({
         id: 'authorization-code-id',
         codeHash: 'hashed-code',
         userId: user.id,
@@ -409,8 +414,7 @@ describe('AppController (e2e)', () => {
         usedAt: new Date('2026-01-01T00:00:00.000Z'),
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         user,
-      },
-    );
+      });
     const refreshTokenCreate = jest
       .spyOn(prismaService.refreshToken, 'create')
       .mockImplementation((args: { data: Record<string, unknown> }) => {
@@ -933,8 +937,9 @@ describe('AppController (e2e)', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       user,
     });
-    jest.spyOn(prismaService.refreshToken, 'create').mockImplementation(
-      (args: { data: Record<string, unknown> }) =>
+    jest
+      .spyOn(prismaService.refreshToken, 'create')
+      .mockImplementation((args: { data: Record<string, unknown> }) =>
         Promise.resolve({
           id: revoked ? 'refresh-token-c-id' : 'refresh-token-b-id',
           tokenHash: args.data.tokenHash,
@@ -944,9 +949,10 @@ describe('AppController (e2e)', () => {
           replacedByTokenId: null,
           createdAt: new Date('2026-01-01T00:00:00.000Z'),
         }),
-    );
-    jest.spyOn(prismaService.refreshToken, 'updateMany').mockImplementation(
-      () => {
+      );
+    jest
+      .spyOn(prismaService.refreshToken, 'updateMany')
+      .mockImplementation(() => {
         if (revoked) {
           return Promise.resolve({ count: 0 });
         }
@@ -954,8 +960,7 @@ describe('AppController (e2e)', () => {
         revoked = true;
 
         return Promise.resolve({ count: 1 });
-      },
-    );
+      });
 
     const responses = await Promise.all([
       request(app.getHttpServer())
